@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "Registration": {
+      "title": "Registration",
+      "description": "Student registration for a school",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string", "description": "Student's first name" },
+        "lastName": { "type": "string", "description": "Student's last name" },
+        "gradeLevel": { "type": "string", "description": "Grade level" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "address": { "type": "string", "description": "Home address" },
+        "chosenSchool": { "type": "string", "description": "Name of the chosen school" },
+        "authorId": { "type": "string", "description": "Firebase Auth UID of the student" },
+        "authorEmail": { "type": "string", "description": "Email of the student" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["firstName", "lastName", "gradeLevel", "phone", "address", "chosenSchool", "authorId", "authorEmail", "createdAt"]
+    },
+    "SchoolStats": {
+      "title": "SchoolStats",
+      "description": "Statistics for a school",
+      "type": "object",
+      "properties": {
+        "count": { "type": "integer", "description": "Number of registrations" },
+        "schoolName": { "type": "string", "description": "Name of the school" }
+      },
+      "required": ["count", "schoolName"]
+    }
+  },
+  "firestore": {
+    "/registrations/{registrationId}": {
+      "schema": "Registration",
+      "description": "Collection of student registrations"
+    },
+    "/stats/{schoolId}": {
+      "schema": "SchoolStats",
+      "description": "Global statistics per school"
+    }
+  }
+}

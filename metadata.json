@@ -1,0 +1,6 @@
+{
+  "name": "إعداديتي القريبة - المحاميد",
+  "description": "تطبيق لمساعدة تلاميذ منطقة المحاميد بمراكش على إيجاد الإعدادية الأقرب والتسجيل فيها.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": []
+}
