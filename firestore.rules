@@ -21,27 +21,31 @@ service cloud.firestore {
 
     // Registration validation
     function isValidRegistration(data) {
-      return data.keys().hasAll(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'authorId', 'authorEmail', 'createdAt'])
-        && data.keys().size() == 9
+      return data.keys().hasAll(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'createdAt'])
+        && data.keys().size() == 7
         && data.firstName is string && data.firstName.size() <= 100
         && data.lastName is string && data.lastName.size() <= 100
         && data.gradeLevel is string && data.gradeLevel.size() <= 50
         && data.phone is string && data.phone.size() <= 20
         && data.address is string && data.address.size() <= 250
         && data.chosenSchool is string && data.chosenSchool.size() <= 100
-        && data.authorId == request.auth.uid
-        && data.authorEmail is string
         && data.createdAt == request.time;
     }
 
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == 'rrachidv4@gmail.com' && 
+             request.auth.token.email_verified == true;
+    }
+
     match /registrations/{registrationId} {
-      allow create: if isSignedIn() && isValidRegistration(request.resource.data);
-      allow read: if isSignedIn() && (resource.data.authorId == request.auth.uid || true); // Allow reading for stats in this demo
+      allow create: if isValidRegistration(request.resource.data);
+      allow list, get: if isAdmin();
     }
 
     match /stats/{schoolId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn(); // In a real app, this would be highly restricted or handled by functions
+      allow write: if isAdmin(); 
     }
 
     match /test/connection {

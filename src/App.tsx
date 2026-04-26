@@ -27,7 +27,8 @@ import {
   Menu,
   X,
   BarChart3,
-  Users
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -65,8 +66,8 @@ enum OperationType {
 }
 
 interface RegistrationData extends RegistrationFormInput {
-  authorId: string;
-  authorEmail: string;
+  authorId?: string;
+  authorEmail?: string;
   createdAt: any;
   id: string;
 }
@@ -221,18 +222,18 @@ const SchoolCard = ({
   );
 };
 
-const RegistrationsTable = ({ registrations }: { registrations: RegistrationData[] }) => {
-  if (registrations.length === 0) return null;
+const RegistrationsTable = ({ registrations, isAdmin }: { registrations: RegistrationData[], isAdmin: boolean }) => {
+  if (!isAdmin || registrations.length === 0) return null;
 
   return (
     <div className="mt-12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-6 border-b border-gray-50 flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-green-600" />
-          تتبع التسجيلات الخاصة بك
+          تتبع جميع التسجيلات (للمسؤول)
         </h2>
         <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
-          {registrations.length} تسجيل
+          {registrations.length} تسجيل إجمالي
         </span>
       </div>
       <div className="overflow-x-auto">
@@ -267,8 +268,8 @@ const RegistrationsTable = ({ registrations }: { registrations: RegistrationData
                     تم الإرسال
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-400 text-xs">
-                  {reg.createdAt?.toDate ? reg.createdAt.toDate().toLocaleDateString('ar-MA') : 'قيد المعالجة'}
+                <td className="px-6 py-4 text-gray-400 text-xs text-left" dir="ltr">
+                  {reg.createdAt?.toDate ? reg.createdAt.toDate().toLocaleString('ar-MA') : 'قيد المعالجة'}
                 </td>
               </tr>
             ))}
@@ -280,11 +281,9 @@ const RegistrationsTable = ({ registrations }: { registrations: RegistrationData
 };
 
 const RegistrationForm = ({ 
-  user, 
   selectedSchool, 
   onSuccess 
 }: { 
-  user: FirebaseUser | null; 
   selectedSchool: string; 
   onSuccess: () => void;
 }) => {
@@ -305,10 +304,6 @@ const RegistrationForm = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      setError('يجب تسجيل الدخول أولاً');
-      return;
-    }
     if (!formData.chosenSchool) {
       setError('الرجاء اختيار إعدادية من القائمة');
       return;
@@ -320,9 +315,15 @@ const RegistrationForm = ({
     try {
       await addDoc(collection(db, 'registrations'), {
         ...formData,
-        authorId: user.uid,
-        authorEmail: user.email,
         createdAt: serverTimestamp()
+      });
+      setFormData({
+        firstName: '',
+        lastName: '',
+        gradeLevel: 'السنة الأولى إعدادي',
+        phone: '',
+        address: '',
+        chosenSchool: selectedSchool
       });
       onSuccess();
     } catch (err: any) {
@@ -340,119 +341,119 @@ const RegistrationForm = ({
         تسجيل التلميذ
       </h2>
       
-      {!user ? (
-        <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300">
-          <User className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm mb-4">يجب تسجيل الدخول باستخدام حساب Google لمتابعة التسجيل</p>
-          <button 
-            onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-            className="flex items-center gap-2 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors mx-auto text-sm font-medium"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/layout/google.svg" className="w-5 h-5" alt="Google" />
-            تسجيل الدخول بـ Google
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600">الاسم الشخصي</label>
-              <input 
-                required
-                type="text" 
-                value={formData.firstName}
-                onChange={e => setFormData({...formData, firstName: e.target.value})}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="محمد"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600">الاسم العائلي</label>
-              <input 
-                required
-                type="text" 
-                value={formData.lastName}
-                onChange={e => setFormData({...formData, lastName: e.target.value})}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="العلوي"
-              />
-            </div>
-          </div>
-
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600">المستوى الدراسي</label>
-            <select 
-              value={formData.gradeLevel}
-              onChange={e => setFormData({...formData, gradeLevel: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-            >
-              <option>السنة الأولى إعدادي</option>
-              <option>السنة الثانية إعدادي</option>
-              <option>السنة الثالثة إعدادي</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600">رقم الهاتف</label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-              <input 
-                required
-                type="tel" 
-                value={formData.phone}
-                onChange={e => setFormData({...formData, phone: e.target.value})}
-                className="w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="06XXXXXXXX"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600">عنوان السكن</label>
-            <div className="relative">
-              <Home className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-              <input 
-                required
-                type="text" 
-                value={formData.address}
-                onChange={e => setFormData({...formData, address: e.target.value})}
-                className="w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="المحاميد 9، الشطر..."
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600">الإعدادية المختارة</label>
+            <label className="text-xs font-semibold text-gray-600">الاسم الشخصي</label>
             <input 
-              readOnly 
+              required
               type="text" 
-              value={formData.chosenSchool || 'الرجاء اختيار إعدادية من الخريطة'} 
-              className={`w-full px-3 py-2 border rounded-lg text-sm bg-gray-100 ${!formData.chosenSchool ? 'border-red-300 text-red-500' : 'border-gray-200 text-gray-800'}`}
+              value={formData.firstName}
+              onChange={e => setFormData({...formData, firstName: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              placeholder="محمد"
             />
           </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-600">الاسم العائلي</label>
+            <input 
+              required
+              type="text" 
+              value={formData.lastName}
+              onChange={e => setFormData({...formData, lastName: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              placeholder="العلوي"
+            />
+          </div>
+        </div>
 
-          {error && (
-            <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 p-3 rounded-lg border border-red-100">
-              <AlertCircle className="w-4 h-4" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button 
-            disabled={loading || !formData.chosenSchool}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold shadow-lg transition-all flex justify-center items-center gap-2"
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-600">المستوى الدراسي</label>
+          <select 
+            value={formData.gradeLevel}
+            onChange={e => setFormData({...formData, gradeLevel: e.target.value})}
+            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'تأكيد التسجيل'}
-          </button>
-        </form>
-      )}
+            <option>السنة الأولى إعدادي</option>
+            <option>السنة الثانية إعدادي</option>
+            <option>السنة الثالثة إعدادي</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-600">رقم الهاتف</label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input 
+              required
+              type="tel" 
+              value={formData.phone}
+              onChange={e => setFormData({...formData, phone: e.target.value})}
+              className="w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono"
+              placeholder="06XXXXXXXX"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-600">عنوان السكن</label>
+          <div className="relative">
+            <Home className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input 
+              required
+              type="text" 
+              value={formData.address}
+              onChange={e => setFormData({...formData, address: e.target.value})}
+              className="w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              placeholder="المحاميد 9، الشطر..."
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-600">الإعدادية المختارة</label>
+          <input 
+            readOnly 
+            type="text" 
+            value={formData.chosenSchool || 'الرجاء اختيار إعدادية من الخريطة'} 
+            className={`w-full px-3 py-2 border rounded-lg text-sm bg-gray-100 ${!formData.chosenSchool ? 'border-red-300 text-red-500 font-bold' : 'border-gray-200 text-gray-800'}`}
+          />
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 p-3 rounded-lg border border-red-100">
+            <AlertCircle className="w-4 h-4" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <button 
+          disabled={loading || !formData.chosenSchool}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold shadow-lg transition-all flex justify-center items-center gap-2"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'تأكيد التسجيل'}
+        </button>
+      </form>
     </div>
   );
 };
 
+const ADMIN_EMAILS = ['rrachidv4@gmail.com'];
+const ADMIN_LOCAL_USER = 'admin';
+const ADMIN_LOCAL_PASS = 'Mhamid2024';
+
 export default function App() {
+  const [viewRole, setViewRole] = useState<'landing' | 'admin' | 'user' | 'admin_gate'>(() => {
+    // Check if we previously selected a role to avoid landing page on refresh if desirable
+    // For now, let's start fresh
+    return 'landing';
+  });
+  const [isAdminGatePassed, setIsAdminGatePassed] = useState(false);
+  const [adminGateData, setAdminGateData] = useState({ username: '', password: '' });
+  const [adminGateError, setAdminGateError] = useState('');
+
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const isAdmin = useMemo(() => user && ADMIN_EMAILS.includes(user.email || ''), [user]);
   const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [selectedSchool, setSelectedSchool] = useState<SchoolData | null>(null);
   const [schoolsWithInfo, setSchoolsWithInfo] = useState<(SchoolData & { distance?: string; duration?: string; distanceValue?: number })[]>([]);
@@ -463,60 +464,61 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [globalStats, setGlobalStats] = useState<Record<string, number>>({});
   const [showStatsModal, setShowStatsModal] = useState(false);
-
   const [isManualPicking, setIsManualPicking] = useState(false);
 
-  // Auth observer and registration fetch
+  // Auth observer
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
         getDocFromServer(doc(db, 'test', 'connection')).catch(() => {});
-
-        // Fetch user registrations
-        const q = query(
-          collection(db, 'registrations'),
-          where('authorId', '==', u.uid),
-          orderBy('createdAt', 'desc')
-        );
-
-        const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-          const regs = snapshot.docs.map(d => ({
-            id: d.id,
-            ...d.data()
-          } as RegistrationData));
-          setUserRegistrations(regs);
-        }, (error) => {
-          console.error("Registrations snapshot error:", error);
-        });
-
-        // Fetch global stats (counts per school)
-        // We calculate this from all registrations for now if user has permission
-        // A better production approach would be a 'stats' collection with increments
-        const qAll = query(collection(db, 'registrations'));
-        const unsubscribeAll = onSnapshot(qAll, (snapshot) => {
-          const stats: Record<string, number> = {};
-          snapshot.docs.forEach(d => {
-            const data = d.data();
-            const school = data.chosenSchool;
-            if (school) {
-              stats[school] = (stats[school] || 0) + 1;
-            }
-          });
-          setGlobalStats(stats);
-        });
-
-        return () => {
-          unsubscribeSnapshot();
-          unsubscribeAll();
-        };
-      } else {
-        setUserRegistrations([]);
-        setGlobalStats({});
       }
     });
     return () => unsubscribeAuth();
   }, []);
+
+  // Data fetching effect based on user/admin status
+  useEffect(() => {
+    let unsubscribeRegistrations = () => {};
+    let unsubscribeStats = () => {};
+
+    if (isAdmin) {
+      // Fetch all registrations for admin
+      const q = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
+      unsubscribeRegistrations = onSnapshot(q, (snapshot) => {
+        const regs = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        } as RegistrationData));
+        setUserRegistrations(regs);
+      }, (error) => {
+        console.error("Registrations snapshot error:", error);
+      });
+
+      // Calculate global stats for admin
+      const qAll = query(collection(db, 'registrations'));
+      unsubscribeStats = onSnapshot(qAll, (snapshot) => {
+        const stats: Record<string, number> = {};
+        snapshot.docs.forEach(d => {
+          const data = d.data();
+          const school = data.chosenSchool;
+          if (school) {
+            stats[school] = (stats[school] || 0) + 1;
+          }
+        });
+        setGlobalStats(stats);
+      });
+    } else {
+      // For normal users, we don't show stats or registrations
+      setUserRegistrations([]);
+      setGlobalStats({});
+    }
+
+    return () => {
+      unsubscribeRegistrations();
+      unsubscribeStats();
+    };
+  }, [user, isAdmin]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery) return;
@@ -598,6 +600,136 @@ export default function App() {
     });
   }, [userLocation]);
 
+  if (viewRole === 'landing') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6" dir="rtl">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full bg-white rounded-3xl shadow-2xl shadow-slate-200/50 p-8 border border-white"
+        >
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-100">
+              <SchoolIcon className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-2xl font-black text-slate-800 mb-2">منصة تسجيل التلاميذ</h1>
+            <p className="text-slate-500 text-sm">الرجاء اختيار نوع الدخول للمتابعة</p>
+          </div>
+
+          <div className="space-y-4">
+            <button 
+              onClick={() => setViewRole('admin_gate')}
+              className="w-full group relative overflow-hidden bg-slate-900 text-white p-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <div className="relative z-10 flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                  <ShieldCheck className="w-6 h-6 text-blue-400" />
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold">فضاء المسؤول</p>
+                  <p className="text-xs text-white/50">تتبع وإدارة التسجيلات (يتطلب دخول)</p>
+                </div>
+              </div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-blue-600/20 transition-all"></div>
+            </button>
+
+            <button 
+              onClick={() => setViewRole('user')}
+              className="w-full group relative overflow-hidden bg-white border-2 border-slate-100 p-6 rounded-2xl transition-all hover:border-blue-200 hover:bg-blue-50/30 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <div className="relative z-10 flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6 text-blue-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-slate-800">فضاء التلميذ</p>
+                  <p className="text-xs text-slate-400">التسجيل وتتبع المؤسسات التعليمية</p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <p className="text-center mt-8 text-[10px] text-slate-400 font-bold uppercase tracking-widest">المحاميد - مراكش</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (viewRole === 'admin_gate') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6" dir="rtl">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 border border-slate-100"
+        >
+          <button 
+            onClick={() => setViewRole('landing')}
+            className="mb-6 flex items-center gap-2 text-slate-400 hover:text-slate-800 transition-colors text-sm font-bold"
+          >
+            <ArrowRight className="w-4 h-4 rotate-180" />
+            رجوع
+          </button>
+
+          <div className="mb-6">
+            <h2 className="text-xl font-black text-slate-800">دخول المسؤول</h2>
+            <p className="text-sm text-slate-500">أدخل معلومات الحساب الخاصة بالمسؤولية</p>
+          </div>
+
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (adminGateData.username === ADMIN_LOCAL_USER && adminGateData.password === ADMIN_LOCAL_PASS) {
+                setViewRole('admin');
+                setIsAdminGatePassed(true);
+              } else {
+                setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة');
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-600">اسم المستخدم</label>
+              <input 
+                type="text" 
+                value={adminGateData.username}
+                onChange={e => setAdminGateData({...adminGateData, username: e.target.value})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="admin"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-600">كلمة المرور</label>
+              <input 
+                type="password" 
+                value={adminGateData.password}
+                onChange={e => setAdminGateData({...adminGateData, password: e.target.value})}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            {adminGateError && (
+              <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-2 border border-red-100">
+                <AlertCircle className="w-4 h-4" />
+                {adminGateError}
+              </div>
+            )}
+
+            <button 
+              type="submit"
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg"
+            >
+              تأكيد الدخول
+            </button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 font-sans" dir="rtl">
       <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar">
@@ -631,19 +763,21 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4">
-                  <button 
-                    onClick={() => {
-                      setShowStatsModal(true);
-                      setIsSidebarOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between p-4 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <BarChart3 className="w-5 h-5" />
-                      <span className="font-bold">إحصائيات التسجيل</span>
-                    </div>
-                    <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -rotate-180 transition-all" />
-                  </button>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => {
+                        setShowStatsModal(true);
+                        setIsSidebarOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between p-4 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <BarChart3 className="w-5 h-5" />
+                        <span className="font-bold">إحصائيات التسجيل</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -rotate-180 transition-all" />
+                    </button>
+                  )}
 
                   <div className="pt-4 border-t border-gray-100 mt-4">
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">معلومات الحساب</p>
@@ -667,24 +801,26 @@ export default function App() {
                     ) : (
                       <button 
                         onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                        className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                        className="w-full bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-gray-200"
                       >
                         <User className="w-5 h-5" />
-                        تسجيل الدخول
+                        دخول المسؤول
                       </button>
                     )}
                   </div>
                 </div>
 
                 <div className="mt-auto pt-8">
-                  <div className="bg-slate-900 rounded-2xl p-4 text-white">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs font-bold text-blue-400">إجمالي المسجلين</span>
+                  {isAdmin && (
+                    <div className="bg-slate-900 rounded-2xl p-4 text-white">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-400">إجمالي المسجلين</span>
+                      </div>
+                      <p className="text-3xl font-black">{(Object.values(globalStats) as number[]).reduce((a, b) => a + b, 0)}</p>
+                      <p className="text-[10px] opacity-60 mt-1">تلميذ مسجل في منطقة المحاميد</p>
                     </div>
-                    <p className="text-3xl font-black">{(Object.values(globalStats) as number[]).reduce((a, b) => a + b, 0)}</p>
-                    <p className="text-[10px] opacity-60 mt-1">تلميذ مسجل في منطقة المحاميد</p>
-                  </div>
+                  )}
                 </div>
               </motion.div>
             </>
@@ -772,21 +908,40 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {user ? (
-                <div className="flex items-center gap-3 bg-gray-50 pr-4 pl-1 py-1 rounded-full border border-gray-200">
-                  <span className="text-xs font-semibold text-gray-600 hidden sm:block">{user.displayName}</span>
-                  <img src={user.photoURL || ''} alt={user.displayName || ''} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
-                </div>
-              ) : (
-                <button 
-                  onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 transition-all"
-                >
-                  <User className="w-4 h-4" />
-                  <span className="hidden sm:inline">دخول التسجيل</span>
-                </button>
+                    <div className="flex items-center gap-2">
+              {viewRole === 'admin' && (
+                user ? (
+                  <div className="flex items-center gap-3 bg-gray-50 pr-4 pl-1 py-1 rounded-full border border-gray-200">
+                    <div className="text-left hidden sm:block">
+                      <p className="text-[10px] font-black text-blue-600 uppercase leading-none mb-0.5 tracking-tighter">
+                        {isAdmin ? 'المسؤول' : 'مستخدم'}
+                      </p>
+                      <p className="text-xs font-bold text-gray-700 leading-none">{user.displayName}</p>
+                    </div>
+                    <img src={user.photoURL || ''} alt={user.displayName || ''} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-slate-900 transition-all"
+                  >
+                    <User className="w-4 h-4" />
+                    <span className="hidden sm:inline">دخول المسؤول</span>
+                  </button>
+                )
               )}
+              
+              <button 
+                onClick={() => {
+                  setViewRole('landing');
+                  setIsAdminGatePassed(false);
+                  setAdminGateData({ username: '', password: '' });
+                }}
+                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                title="الرجوع للقائمة"
+              >
+                <ArrowRight className="w-5 h-5 rotate-180" />
+              </button>
             </div>
           </div>
         </header>
@@ -974,7 +1129,6 @@ export default function App() {
                     exit={{ opacity: 0, y: -20 }}
                   >
                     <RegistrationForm 
-                      user={user} 
                       selectedSchool={selectedSchool?.name || ''} 
                       onSuccess={() => setIsSuccess(true)}
                     />
@@ -985,7 +1139,7 @@ export default function App() {
             </div>
           </div>
 
-          <RegistrationsTable registrations={userRegistrations} />
+          <RegistrationsTable registrations={userRegistrations} isAdmin={isAdmin && viewRole === 'admin'} />
         </main>
 
         <footer className="max-w-7xl mx-auto px-8 py-12 text-center text-gray-400 text-xs">
