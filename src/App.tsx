@@ -1342,7 +1342,6 @@ export default function App() {
                   <Home className="w-4 h-4 group-hover:scale-110 transition-transform" />
                   الرجوع للقائمة الرئيسية
                 </button>
-                <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">من إنتاج : رشيد الهاريوي</p>
               </div>
 
               {/* Extra Hero Section (Matching bottom of image) */}
