@@ -19,23 +19,38 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Registration validation
+    // Registration validation - using get() with default for robustness
     function isValidRegistration(data) {
-      return data.firstName is string && data.firstName.size() <= 100
-        && data.lastName is string && data.lastName.size() <= 100
-        && data.gradeLevel is string && data.gradeLevel.size() <= 50
-        && data.phone is string && data.phone.size() <= 20
-        && data.address is string && data.address.size() <= 250
-        && data.chosenSchool is string && data.chosenSchool.size() <= 100
-        && data.choice1 is string && data.choice1.size() <= 100
-        && data.choice2 is string && data.choice2.size() <= 100
-        && data.choice3 is string && data.choice3.size() <= 100;
+      let firstName = data.get('firstName', '');
+      let lastName = data.get('lastName', '');
+      let gradeLevel = data.get('gradeLevel', '');
+      let phone = data.get('phone', '');
+      let address = data.get('address', '');
+      let chosenSchool = data.get('chosenSchool', '');
+      let choice1 = data.get('choice1', '');
+      let choice2 = data.get('choice2', '');
+      let choice3 = data.get('choice3', '');
+
+      return firstName is string && firstName.size() <= 100
+        && lastName is string && lastName.size() <= 100
+        && gradeLevel is string && gradeLevel.size() <= 50
+        && phone is string && phone.size() <= 20
+        && address is string && address.size() <= 250
+        && chosenSchool is string && chosenSchool.size() <= 100
+        && choice1 is string && choice1.size() <= 100
+        && choice2 is string && choice2.size() <= 100
+        && choice3 is string && choice3.size() <= 100;
     }
 
     function isAdmin() {
       return isSignedIn() && 
              (request.auth.token.email == 'rrachidv4@gmail.com' || 
               (request.auth.token.email_verified == true && exists(/databases/$(database)/documents/admins/$(request.auth.uid))));
+    }
+
+    match /admins/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && request.auth.token.email == 'rrachidv4@gmail.com');
     }
 
     match /registrations/{registrationId} {

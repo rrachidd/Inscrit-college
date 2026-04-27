@@ -297,11 +297,19 @@ const AdminDashboard = ({ registrations, userRole }: { registrations: Registrati
         <h2 className="text-2xl font-black text-slate-800">
           {userRole === 'admin' ? 'لوحة تحكم المسؤول' : 'لوحة تحكم المساعد (Staff)'}
         </h2>
-        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-sm ${
-          userRole === 'admin' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white'
-        }`}>
-          {userRole === 'admin' ? 'Full Access' : 'View Only Mode'}
-        </span>
+        <div className="flex items-center gap-3">
+          {userRole === 'admin' && !auth.currentUser && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold animate-pulse">
+              <AlertCircle className="w-4 h-4" />
+              <span>يجب ربط حساب Google للقيام بالتعديلات</span>
+            </div>
+          )}
+          <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-sm ${
+            userRole === 'admin' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white'
+          }`}>
+            {userRole === 'admin' ? 'Full Access' : 'View Only Mode'}
+          </span>
+        </div>
       </div>
       
       {/* Stats Cards */}
@@ -844,22 +852,38 @@ const EditRegistrationModal = ({
   });
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await onUpdate(registration.id, {
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      gradeLevel: formData.gradeLevel,
-      phone: formData.phone,
-      address: formData.address,
-      chosenSchool: formData.chosenSchool,
-      choice1: formData.choice1,
-      choice2: formData.choice2,
-      choice3: formData.choice3
-    });
-    setLoading(false);
-    onClose();
+    setError(null);
+    try {
+      await onUpdate(registration.id, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        gradeLevel: formData.gradeLevel,
+        phone: formData.phone,
+        address: formData.address,
+        chosenSchool: formData.chosenSchool,
+        choice1: formData.choice1 || '',
+        choice2: formData.choice2 || '',
+        choice3: formData.choice3 || ''
+      });
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      let msg = "حدث خطأ أثناء التحديث. تأكد من صلاحياتك.";
+      try {
+        const info = JSON.parse(err.message);
+        if (info.error?.includes("permission-denied") || info.error?.includes("insufficient permissions")) {
+          msg = "تم رفض الوصول: يجب ربط حساب Google الخاص بك والتوفر على صلاحيات المسؤول.";
+        }
+      } catch (e) {}
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -877,6 +901,12 @@ const EditRegistrationModal = ({
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-500">الاسم الشخصي</label>
@@ -1060,11 +1090,9 @@ export default function App() {
 
   const handleUpdateRegistration = async (id: string, data: Partial<RegistrationFormInput>) => {
     try {
-      // Clean undefined values to prevent Firestore errors
-      const cleanData = Object.fromEntries(
-        Object.entries(data).filter(([_, value]) => value !== undefined)
-      );
-      await updateDoc(doc(db, 'registrations', id), { ...cleanData, updatedAt: serverTimestamp() });
+      const docRef = doc(db, 'registrations', id);
+      // We must ensure updatedAt is provided as the rules require it
+      await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `registrations/${id}`);
     }
