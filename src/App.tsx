@@ -680,8 +680,11 @@ const RegistrationForm = ({
     setError(null);
 
     try {
+      const cleanFormData = Object.fromEntries(
+        Object.entries(formData).filter(([_, value]) => value !== undefined)
+      );
       await addDoc(collection(db, 'registrations'), {
-        ...formData,
+        ...cleanFormData,
         createdAt: serverTimestamp()
       });
       setFormData({
@@ -827,7 +830,18 @@ const EditRegistrationModal = ({
   onClose: () => void, 
   onUpdate: (id: string, data: Partial<RegistrationFormInput>) => Promise<void> 
 }) => {
-  const [formData, setFormData] = useState({ ...registration });
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    gradeLevel: '',
+    phone: '',
+    address: '',
+    chosenSchool: '',
+    choice1: '',
+    choice2: '',
+    choice3: '',
+    ...registration 
+  });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1046,7 +1060,11 @@ export default function App() {
 
   const handleUpdateRegistration = async (id: string, data: Partial<RegistrationFormInput>) => {
     try {
-      await updateDoc(doc(db, 'registrations', id), { ...data, updatedAt: serverTimestamp() });
+      // Clean undefined values to prevent Firestore errors
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([_, value]) => value !== undefined)
+      );
+      await updateDoc(doc(db, 'registrations', id), { ...cleanData, updatedAt: serverTimestamp() });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `registrations/${id}`);
     }
