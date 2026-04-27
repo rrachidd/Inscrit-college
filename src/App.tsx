@@ -28,9 +28,30 @@ import {
   X,
   BarChart3,
   Users,
-  ShieldCheck
+  ShieldCheck,
+  Trash2,
+  Edit3,
+  MessageCircle,
+  ExternalLink,
+  PieChart as PieChartIcon,
+  Activity,
+  TrendingUp,
+  LayoutDashboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell,
+  LabelList 
+} from 'recharts';
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -49,6 +70,8 @@ import {
   orderBy,
   onSnapshot,
   setDoc,
+  deleteDoc,
+  updateDoc,
   increment,
   getDocs
 } from 'firebase/firestore';
@@ -69,6 +92,8 @@ interface RegistrationData extends RegistrationFormInput {
   authorId?: string;
   authorEmail?: string;
   createdAt: any;
+  updatedAt?: any;
+  deletedAt?: any;
   id: string;
 }
 
@@ -109,21 +134,28 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
   const map = useMap();
   const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null);
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!map) return;
-    setDirectionsService(new google.maps.DirectionsService());
-    const renderer = new google.maps.DirectionsRenderer({ 
-      map,
-      suppressMarkers: true,
-      polylineOptions: {
-        strokeColor: '#2563eb',
-        strokeWeight: 5,
-        strokeOpacity: 0.7
-      }
-    });
-    setDirectionsRenderer(renderer);
-    return () => renderer.setMap(null);
+    try {
+      setDirectionsService(new google.maps.DirectionsService());
+      const renderer = new google.maps.DirectionsRenderer({ 
+        map,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#3b82f6',
+          strokeWeight: 6,
+          strokeOpacity: 0.8
+        }
+      });
+      setDirectionsRenderer(renderer);
+    } catch (e) {
+      console.error("Failed to initialize Directions Service:", e);
+    }
+    return () => {
+      if (directionsRenderer) directionsRenderer.setMap(null);
+    };
   }, [map]);
 
   useEffect(() => {
@@ -138,16 +170,19 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
           directionsRenderer.setDirections(result);
+          setError(null);
         } else {
           console.error("Directions Request Failed:", status);
-          if (status === 'REQUEST_DENIED') {
-            // Silently fail or could show a toast: "Please enable Directions API"
-          }
+          setError(status);
           directionsRenderer.setDirections({ routes: [] } as any);
         }
       }
     );
   }, [directionsService, directionsRenderer, origin, destination]);
+
+  if (error === 'REQUEST_DENIED') {
+    return null;
+  }
 
   return null;
 };
@@ -222,8 +257,221 @@ const SchoolCard = ({
   );
 };
 
-const RegistrationsTable = ({ registrations, isAdmin }: { registrations: RegistrationData[], isAdmin: boolean }) => {
+const AdminDashboard = ({ registrations }: { registrations: RegistrationData[] }) => {
+  const schoolCount = SCHOOLS.map(school => ({
+    name: school.name,
+    count: registrations.filter(r => r.chosenSchool === school.name).length
+  }));
+
+  const gradeCount = [
+    { name: 'الأولى', count: registrations.filter(r => r.gradeLevel === 'السنة الأولى إعدادي').length },
+    { name: 'الثانية', count: registrations.filter(r => r.gradeLevel === 'السنة الثانية إعدادي').length },
+    { name: 'الثالثة', count: registrations.filter(r => r.gradeLevel === 'السنة الثالثة إعدادي').length },
+  ];
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
+  return (
+    <div className="space-y-8 py-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-blue-50 rounded-2xl">
+              <Users className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-400">إجمالي التلاميذ</p>
+              <p className="text-2xl font-black text-slate-800">{registrations.length}</p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
+            <div className="bg-blue-600 h-full w-[70%]" />
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-green-50 rounded-2xl">
+              <Building2 className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-400">توزيع المؤسسات</p>
+              <p className="text-2xl font-black text-slate-800">{SCHOOLS.length}</p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
+            <div className="bg-green-600 h-full w-[85%]" />
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-amber-50 rounded-2xl">
+              <Activity className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-400">الطلبات النشطة</p>
+              <p className="text-2xl font-black text-slate-800">{registrations.length}</p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
+            <div className="bg-amber-600 h-full w-[60%]" />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-blue-500" />
+              توزيع التلاميذ حسب المؤسسة
+            </h3>
+          </div>
+          <div className="h-64 w-full" dir="ltr">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={schoolCount}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                <RechartsTooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                  formatter={(value: any) => [`${value} تلميذ (${((Number(value) / (registrations.length || 1)) * 100).toFixed(1)}%)`, 'العدد']}
+                />
+                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={32}>
+                  <LabelList 
+                    dataKey="count" 
+                    position="top" 
+                    style={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} 
+                    formatter={(value: any) => value > 0 ? value : ''}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <PieChartIcon className="w-5 h-5 text-green-500" />
+              توزيع المستويات الدراسية
+            </h3>
+          </div>
+          <div className="h-64 w-full" dir="ltr">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={gradeCount}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="count"
+                  label={({ name, percent }) => percent > 0 ? `${(percent * 100).toFixed(0)}%` : ''}
+                >
+                  {gradeCount.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip 
+                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                  formatter={(value: any) => [`${value} تلميذ (${((Number(value) / (registrations.length || 1)) * 100).toFixed(1)}%)`, 'العدد']}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex justify-center gap-4 mt-4">
+            {gradeCount.map((g, i) => {
+              const percentage = ((g.count / (registrations.length || 1)) * 100).toFixed(1);
+              return (
+                <div key={g.name} className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i]}} />
+                    <span className="text-[10px] font-bold text-slate-500">{g.name}</span>
+                  </div>
+                  <span className="text-[9px] font-black text-slate-400">{g.count} ({percentage}%)</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Popular Schools Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-50">
+          <h3 className="font-black text-slate-800">إحصائيات المؤسسات التفصيلية</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-6 py-4 text-xs font-black text-slate-400">المؤسسة</th>
+                <th className="px-6 py-4 text-xs font-black text-slate-400">عدد التلاميذ</th>
+                <th className="px-6 py-4 text-xs font-black text-slate-400">الحالة</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {schoolCount.sort((a, b) => b.count - a.count).map((s) => (
+                <tr key={s.name} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-bold text-slate-700">{s.name}</td>
+                  <td className="px-6 py-4 font-mono text-sm">{s.count}</td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-0.5 bg-green-50 text-green-600 rounded-full text-[10px] font-bold">نشط</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RegistrationsTable = ({ 
+  registrations, 
+  isAdmin, 
+  onEdit, 
+  onDelete 
+}: { 
+  registrations: RegistrationData[], 
+  isAdmin: boolean,
+  onEdit: (reg: RegistrationData) => void,
+  onDelete: (id: string) => void
+}) => {
   if (!isAdmin || registrations.length === 0) return null;
+
+  const handleWhatsApp = (reg: RegistrationData) => {
+    const message = `السلام عليكم ورحمة الله،\n\nنخبركم أنه تم قبول ملف التلميذ(ة) ${reg.firstName} ${reg.lastName} للتسجيل في ${reg.chosenSchool} للموسم الدراسي المقبل.\n\nالمرجو الالتحاق بالمؤسسة لاستكمال إجراءات التسجيل.\n\nمع التحية.`;
+    const encodedMessage = encodeURIComponent(message);
+    let phone = reg.phone.replace(/\s+/g, '');
+    if (phone.startsWith('0')) {
+      phone = '212' + phone.substring(1);
+    } else if (!phone.startsWith('212') && !phone.startsWith('+')) {
+      phone = '212' + phone;
+    }
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   return (
     <div className="mt-12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -245,17 +493,18 @@ const RegistrationsTable = ({ registrations, isAdmin }: { registrations: Registr
               <th className="px-6 py-4">الهاتف</th>
               <th className="px-6 py-4">المؤسسة المختارة</th>
               <th className="px-6 py-4">الحالة</th>
-              <th className="px-6 py-4">التاريخ</th>
+              <th className="px-6 py-4">الإجراءات</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {registrations.map((reg) => (
               <tr key={reg.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 font-semibold text-gray-800">
-                  {reg.firstName} {reg.lastName}
+                <td className="px-6 py-4">
+                  <div className="font-semibold text-gray-800">{reg.firstName} {reg.lastName}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">تاريخ الطلب: {reg.createdAt?.toDate ? reg.createdAt.toDate().toLocaleDateString('ar-MA') : '...'}</div>
                 </td>
                 <td className="px-6 py-4 text-gray-600">{reg.gradeLevel}</td>
-                <td className="px-6 py-4 text-gray-600 font-mono">{reg.phone}</td>
+                <td className="px-6 py-4 text-gray-600 font-mono" dir="ltr">{reg.phone}</td>
                 <td className="px-6 py-4">
                   <span className="flex items-center gap-1.5 font-medium text-blue-600">
                     <Building2 className="w-3.5 h-3.5" />
@@ -265,11 +514,38 @@ const RegistrationsTable = ({ registrations, isAdmin }: { registrations: Registr
                 <td className="px-6 py-4">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold border border-green-100">
                     <CheckCircle2 className="w-3 h-3" />
-                    تم الإرسال
+                    مقبول
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-400 text-xs text-left" dir="ltr">
-                  {reg.createdAt?.toDate ? reg.createdAt.toDate().toLocaleString('ar-MA') : 'قيد المعالجة'}
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleWhatsApp(reg)}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="مراسلة واتساب"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => onEdit(reg)}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="تعديل"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Removed confirm dialog for cleaner UX
+                        onDelete(reg.id);
+                      }}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                      title="حذف"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -438,16 +714,186 @@ const RegistrationForm = ({
   );
 };
 
+const EditRegistrationModal = ({ 
+  registration, 
+  onClose, 
+  onUpdate 
+}: { 
+  registration: RegistrationData, 
+  onClose: () => void, 
+  onUpdate: (id: string, data: Partial<RegistrationFormInput>) => Promise<void> 
+}) => {
+  const [formData, setFormData] = useState({ ...registration });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    await onUpdate(registration.id, {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      gradeLevel: formData.gradeLevel,
+      phone: formData.phone,
+      address: formData.address,
+      chosenSchool: formData.chosenSchool
+    });
+    setLoading(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex justify-center items-center p-4" dir="rtl">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden"
+      >
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-800">تعديل بيانات التلميذ</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+            <X className="w-5 h-5 text-gray-400" />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500">الاسم الشخصي</label>
+              <input 
+                type="text" 
+                value={formData.firstName}
+                onChange={e => setFormData({...formData, firstName: e.target.value})}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500">الاسم العائلي</label>
+              <input 
+                type="text" 
+                value={formData.lastName}
+                onChange={e => setFormData({...formData, lastName: e.target.value})}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">المستوى الدراسي</label>
+            <select 
+              value={formData.gradeLevel}
+              onChange={e => setFormData({...formData, gradeLevel: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option>السنة الأولى إعدادي</option>
+              <option>السنة الثانية إعدادي</option>
+              <option>السنة الثالثة إعدادي</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">رقم الهاتف</label>
+            <input 
+              type="tel" 
+              value={formData.phone}
+              onChange={e => setFormData({...formData, phone: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              dir="ltr"
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">العنوان</label>
+            <input 
+              type="text" 
+              value={formData.address}
+              onChange={e => setFormData({...formData, address: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">الإعدادية</label>
+            <select 
+              value={formData.chosenSchool}
+              onChange={e => setFormData({...formData, chosenSchool: e.target.value})}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SCHOOLS.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 disabled:bg-blue-300 transition-all"
+            >
+              {loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+            </button>
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all"
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
 const ADMIN_EMAILS = ['rrachidv4@gmail.com'];
 const ADMIN_LOCAL_USER = 'admin';
 const ADMIN_LOCAL_PASS = 'Mhamid2024';
 
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  // Removed alert for cleaner UX
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export default function App() {
-  const [viewRole, setViewRole] = useState<'landing' | 'admin' | 'user' | 'admin_gate'>(() => {
-    // Check if we previously selected a role to avoid landing page on refresh if desirable
-    // For now, let's start fresh
-    return 'landing';
-  });
+  const [viewRole, setViewRole] = useState<'landing' | 'admin' | 'user' | 'admin_gate'>(() => 'landing');
+  const [activeAdminTab, setActiveAdminTab] = useState<'registrations' | 'dashboard'>('dashboard');
   const [isAdminGatePassed, setIsAdminGatePassed] = useState(false);
   const [adminGateData, setAdminGateData] = useState({ username: '', password: '' });
   const [adminGateError, setAdminGateError] = useState('');
@@ -465,6 +911,27 @@ export default function App() {
   const [globalStats, setGlobalStats] = useState<Record<string, number>>({});
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [isManualPicking, setIsManualPicking] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<RegistrationData | null>(null);
+
+  const handleDeleteRegistration = async (id: string) => {
+    try {
+      const docRef = doc(db, 'registrations', id);
+      await deleteDoc(docRef);
+      // Removed success alert
+      setUserRegistrations(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error("Delete error for ID:", id, err);
+      handleFirestoreError(err, OperationType.DELETE, `registrations/${id}`);
+    }
+  };
+
+  const handleUpdateRegistration = async (id: string, data: Partial<RegistrationFormInput>) => {
+    try {
+      await updateDoc(doc(db, 'registrations', id), { ...data, updatedAt: serverTimestamp() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `registrations/${id}`);
+    }
+  };
 
   // Auth observer
   useEffect(() => {
@@ -484,12 +951,21 @@ export default function App() {
 
     if (isAdmin) {
       // Fetch all registrations for admin
-      const q = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
-      unsubscribeRegistrations = onSnapshot(q, (snapshot) => {
-        const regs = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        } as RegistrationData));
+      const q = query(
+        collection(db, 'registrations'), 
+        where('deletedAt', '==', null),
+        orderBy('createdAt', 'desc')
+      );
+      // Wait: Firestore won't let you mix where null and orderby without index, 
+      // let's simplify for now or handle missing index
+      const qSimple = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
+      unsubscribeRegistrations = onSnapshot(qSimple, (snapshot) => {
+        const regs = snapshot.docs
+          .map(d => ({
+            id: d.id,
+            ...d.data()
+          } as RegistrationData))
+          .filter(r => !r.deletedAt); // Client-side filter to avoid index issues for now
         setUserRegistrations(regs);
       }, (error) => {
         console.error("Registrations snapshot error:", error);
@@ -531,12 +1007,7 @@ export default function App() {
         setUserLocation(loc);
       } else {
         console.warn('Geocoding failed:', status);
-        // Fallback or alert
-        if (status === 'REQUEST_DENIED') {
-          alert('خدمة البحث عن العناوين غير مفعلة في مفتاح API. يمكنك النقر يدوياً على الخريطة.');
-        } else {
-          alert('لم يتم العثور على العنوان في منطقة المحاميد');
-        }
+        // Removed alerts for cleaner UX
       }
     });
   }, [searchQuery]);
@@ -550,7 +1021,7 @@ export default function App() {
         setLoading(false);
       },
       () => {
-        alert('فشل في تحديد الموقع الحالي');
+        console.warn('Geolocation failed');
         setLoading(false);
       }
     );
@@ -602,54 +1073,42 @@ export default function App() {
 
   if (viewRole === 'landing') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6" dir="rtl">
+      <div className="min-h-screen launcher-bg flex items-center justify-center p-6 text-right" dir="rtl">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white rounded-3xl shadow-2xl shadow-slate-200/50 p-8 border border-white"
+          className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-10 border border-white/10"
         >
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-100">
-              <SchoolIcon className="w-10 h-10 text-white" />
+          <div className="text-center mb-10">
+            <div className="w-24 h-24 bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/5">
+              <SchoolIcon className="w-12 h-12 text-blue-200" />
             </div>
-            <h1 className="text-2xl font-black text-slate-800 mb-2">منصة تسجيل التلاميذ</h1>
-            <p className="text-slate-500 text-sm">الرجاء اختيار نوع الدخول للمتابعة</p>
+            <h1 className="text-3xl font-black text-white mb-3">نظام إدارة التسجيلات</h1>
+            <p className="text-blue-100/60 text-sm font-medium">نظام التوجيه المدرسي بمنطقة المحاميد مراكش</p>
           </div>
 
           <div className="space-y-4">
             <button 
-              onClick={() => setViewRole('admin_gate')}
-              className="w-full group relative overflow-hidden bg-slate-900 text-white p-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => setViewRole('user')}
+              className="w-full group relative overflow-hidden bg-white text-blue-900 p-6 rounded-3xl transition-all hover:scale-[1.02] active:scale-[0.98] font-black text-xl shadow-xl shadow-blue-900/40"
             >
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6 text-blue-400" />
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold">فضاء المسؤول</p>
-                  <p className="text-xs text-white/50">تتبع وإدارة التسجيلات (يتطلب دخول)</p>
-                </div>
-              </div>
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-blue-600/20 transition-all"></div>
+              دخول المستخدم
             </button>
 
             <button 
-              onClick={() => setViewRole('user')}
-              className="w-full group relative overflow-hidden bg-white border-2 border-slate-100 p-6 rounded-2xl transition-all hover:border-blue-200 hover:bg-blue-50/30 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => setViewRole('admin_gate')}
+              className="w-full group relative overflow-hidden bg-blue-900/40 border border-white/10 text-white p-6 rounded-3xl transition-all hover:bg-blue-900/60 hover:scale-[1.02] active:scale-[0.98]"
             >
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-600" />
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-slate-800">فضاء التلميذ</p>
-                  <p className="text-xs text-slate-400">التسجيل وتتبع المؤسسات التعليمية</p>
-                </div>
+              <div className="flex items-center justify-center gap-3">
+                <ShieldCheck className="w-6 h-6 text-blue-300" />
+                <span className="text-xl font-bold">فضاء المسؤول</span>
               </div>
             </button>
           </div>
 
-          <p className="text-center mt-8 text-[10px] text-slate-400 font-bold uppercase tracking-widest">المحاميد - مراكش</p>
+          <div className="text-center mt-10">
+            <p className="text-white/20 text-[10px] font-black uppercase tracking-widest">المحاميد - مراكش</p>
+          </div>
         </motion.div>
       </div>
     );
@@ -657,23 +1116,23 @@ export default function App() {
 
   if (viewRole === 'admin_gate') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6" dir="rtl">
+      <div className="min-h-screen launcher-bg flex items-center justify-center p-6" dir="rtl">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 border border-slate-100"
+          className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-10 border border-white/10"
         >
           <button 
             onClick={() => setViewRole('landing')}
-            className="mb-6 flex items-center gap-2 text-slate-400 hover:text-slate-800 transition-colors text-sm font-bold"
+            className="mb-8 flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm font-bold"
           >
             <ArrowRight className="w-4 h-4 rotate-180" />
             رجوع
           </button>
 
-          <div className="mb-6">
-            <h2 className="text-xl font-black text-slate-800">دخول المسؤول</h2>
-            <p className="text-sm text-slate-500">أدخل معلومات الحساب الخاصة بالمسؤولية</p>
+          <div className="mb-8">
+            <h2 className="text-2xl font-black text-white">دخول المسؤول</h2>
+            <p className="text-sm text-blue-100/60">أدخل معلومات الحساب للمتابعة</p>
           </div>
 
           <form 
@@ -686,33 +1145,33 @@ export default function App() {
                 setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة');
               }
             }}
-            className="space-y-4"
+            className="space-y-5"
           >
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-600">اسم المستخدم</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-blue-100/40 mr-2">اسم المستخدم</label>
               <input 
                 type="text" 
                 value={adminGateData.username}
                 onChange={e => setAdminGateData({...adminGateData, username: e.target.value})}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-white/10"
                 placeholder="admin"
                 required
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-600">كلمة المرور</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-blue-100/40 mr-2">كلمة المرور</label>
               <input 
                 type="password" 
                 value={adminGateData.password}
                 onChange={e => setAdminGateData({...adminGateData, password: e.target.value})}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-white/10"
                 placeholder="••••••••"
                 required
               />
             </div>
 
             {adminGateError && (
-              <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-2 border border-red-100">
+              <div className="p-4 bg-red-500/20 text-red-200 text-xs rounded-2xl flex items-center gap-3 border border-red-500/20">
                 <AlertCircle className="w-4 h-4" />
                 {adminGateError}
               </div>
@@ -720,7 +1179,7 @@ export default function App() {
 
             <button 
               type="submit"
-              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg"
+              className="w-full py-5 bg-white text-blue-900 rounded-2xl font-black text-lg hover:shadow-2xl hover:shadow-blue-900/40 transition-all shadow-xl"
             >
               تأكيد الدخول
             </button>
@@ -731,440 +1190,282 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900 font-sans" dir="rtl">
+    <div className={`min-h-screen ${viewRole === 'admin' || viewRole === 'admin_gate' ? 'launcher-bg' : 'bg-slate-200'} text-gray-900 font-sans transition-colors duration-500`} dir="rtl">
       <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar">
         
-        {/* Sidebar Overlay */}
+        {/* Profile / Logout Widget (Floating) */}
         <AnimatePresence>
-          {isSidebarOpen && (
-            <>
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsSidebarOpen(false)}
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60]"
-              />
-              <motion.div 
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed top-0 bottom-0 right-0 w-80 bg-white z-[70] shadow-2xl flex flex-col p-6"
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Menu className="w-5 h-5 text-blue-600" />
-                    القائمة الرئيسية
-                  </h2>
-                  <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
+          {viewRole === 'admin' && user && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="fixed top-6 left-6 z-[100] flex flex-col items-center gap-2"
+            >
+              <div className="profile-card p-4 rounded-3xl flex flex-col items-center gap-2 shadow-2xl">
+                <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden shadow-inner">
+                  <img src={user.photoURL || ''} alt="" className="w-full h-full object-cover" />
                 </div>
-
-                <div className="space-y-4">
-                  {isAdmin && (
+                <div className="text-center">
+                  <p className="text-white font-bold text-sm">{user.displayName || 'هيا نتعلم'}</p>
+                  <div className="flex flex-col items-center gap-1 mt-1">
+                    <button 
+                      onClick={() => signOut(auth)}
+                      className="text-orange-400 text-[10px] font-bold hover:text-orange-300 transition-colors"
+                    >
+                      تسجيل الخروج
+                    </button>
                     <button 
                       onClick={() => {
-                        setShowStatsModal(true);
-                        setIsSidebarOpen(false);
+                        setViewRole('landing');
+                        setIsAdminGatePassed(false);
                       }}
-                      className="w-full flex items-center justify-between p-4 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all group"
+                      className="text-white/40 text-[9px] font-bold hover:text-white transition-colors flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/5"
                     >
-                      <div className="flex items-center gap-3">
-                        <BarChart3 className="w-5 h-5" />
-                        <span className="font-bold">إحصائيات التسجيل</span>
-                      </div>
-                      <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -rotate-180 transition-all" />
+                      <Home className="w-2.5 h-2.5" />
+                      العودة للرئيسية
                     </button>
-                  )}
-
-                  <div className="pt-4 border-t border-gray-100 mt-4">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">معلومات الحساب</p>
-                    {user ? (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                          <img src={user.photoURL || ''} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt="" />
-                          <div>
-                            <p className="text-sm font-bold truncate max-w-[150px]">{user.displayName}</p>
-                            <p className="text-[10px] text-gray-500 font-medium">{user.email}</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => signOut(auth)}
-                          className="w-full flex items-center gap-2 px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all text-sm font-bold"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          تسجيل الخروج
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                        className="w-full bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-gray-200"
-                      >
-                        <User className="w-5 h-5" />
-                        دخول المسؤول
-                      </button>
-                    )}
                   </div>
                 </div>
-
-                <div className="mt-auto pt-8">
-                  {isAdmin && (
-                    <div className="bg-slate-900 rounded-2xl p-4 text-white">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Users className="w-4 h-4 text-blue-400" />
-                        <span className="text-xs font-bold text-blue-400">إجمالي المسجلين</span>
-                      </div>
-                      <p className="text-3xl font-black">{(Object.values(globalStats) as number[]).reduce((a, b) => a + b, 0)}</p>
-                      <p className="text-[10px] opacity-60 mt-1">تلميذ مسجل في منطقة المحاميد</p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Stats Modal */}
-        <AnimatePresence>
-          {showStatsModal && (
-            <div className="fixed inset-0 z-[100] flex justify-center items-center p-4">
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowStatsModal(false)}
-                className="fixed inset-0 bg-black/60 backdrop-blur-md"
-              />
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white w-full max-w-lg rounded-3xl shadow-2xl relative z-10 overflow-hidden"
-              >
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white">
-                  <div className="flex items-center gap-3">
-                    <BarChart3 className="w-6 h-6" />
-                    <h2 className="text-xl font-bold">إحصائيات الإعداديات</h2>
-                  </div>
-                  <button onClick={() => setShowStatsModal(false)} className="p-2 hover:bg-white/10 rounded-full">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <div className="p-6 max-h-[70vh] overflow-y-auto">
-                  <div className="space-y-4">
-                    {SCHOOLS.map(school => (
-                      <div key={school.id} className="group">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm font-bold text-gray-700">{school.name}</span>
-                          <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                            {globalStats[school.name] || 0} تلميذ
-                          </span>
-                        </div>
-                        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-50">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min(100, ((globalStats[school.name] || 0) / (Math.max(...(Object.values(globalStats) as number[]), 1))) * 100)}%` }}
-                            className="h-full bg-blue-600 rounded-full shadow-sm"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        {/* Header Section */}
+        <header className="pt-12 pb-8 px-6 text-center">
+          <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
+            <h1 className="text-3xl font-black text-white flex items-center gap-3 drop-shadow-lg">
+              <span>نظام إدارة التسجيلات</span>
+              <Building2 className="w-8 h-8 text-blue-300" />
+            </h1>
+            <p className="text-blue-100/60 text-sm font-medium -mt-4">نظام التوجيه المدرسي بمنطقة المحاميد مراكش</p>
 
-                <div className="p-4 bg-gray-50 border-t border-gray-100 text-center">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">يتم التحديث لحظياً عند كل عملية تسجيل جديدة</p>
-                </div>
+            {viewRole === 'admin' && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="orange-banner w-full max-w-2xl px-8 py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-sm"
+              >
+                <Info className="w-5 h-5 shrink-0" />
+                <span>دليل الاستخدام وملاحظات</span>
               </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+            )}
+          </div>
+        </header>
 
-        {/* Header */}
-        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100 px-6 py-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="p-2.5 hover:bg-gray-100 rounded-xl transition-all"
-              >
-                <Menu className="w-6 h-6 text-gray-700" />
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-200 hidden sm:block">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold tracking-tight">إعداديتي القريبة</h1>
-                  <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    منطقة المحاميد - مراكش
+        <main className="max-w-5xl mx-auto p-6 md:p-8">
+          {viewRole === 'admin' ? (
+            <div className="space-y-12">
+              {/* Launcher Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setActiveAdminTab('dashboard')}
+                  className={`launcher-button ${activeAdminTab === 'dashboard' ? 'active' : ''}`}
+                >
+                  <div className="p-3 rounded-xl bg-orange-100/10 active:bg-blue-100">
+                    <LayoutDashboard className={`w-6 h-6 ${activeAdminTab === 'dashboard' ? 'text-blue-900' : 'text-white'}`} />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg">لوحة التحكم</p>
+                    <p className="text-[10px] opacity-60">إحصائيات عامة للمؤسسات</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={() => setActiveAdminTab('registrations')}
+                  className={`launcher-button ${activeAdminTab === 'registrations' ? 'active' : ''}`}
+                >
+                  <div className="p-3 rounded-xl bg-blue-100/10">
+                    <Users className={`w-6 h-6 ${activeAdminTab === 'registrations' ? 'text-blue-900' : 'text-white'}`} />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg">لائحة التلاميذ</p>
+                    <p className="text-[10px] opacity-60">تدبير التسجيلات والمتابعة</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={() => setActiveAdminTab('dashboard')}
+                  className={`launcher-button ${activeAdminTab === 'dashboard' ? 'active' : ''}`}
+                >
+                  <div className="p-3 rounded-xl bg-green-100/10">
+                    <BarChart3 className={`w-6 h-6 ${activeAdminTab === 'dashboard' ? 'text-blue-900' : 'text-white'}`} />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg">إحصائيات</p>
+                    <p className="text-[10px] opacity-60">تتبع تسجيلات التلاميذ</p>
+                  </div>
+                </button>
+
+                <button className="launcher-button">
+                  <div className="p-3 rounded-xl bg-pink-100/10">
+                    <X className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg">الإعدادات</p>
+                    <p className="text-[10px] opacity-60">تخصيص النظام والمستخدمين</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Dynamic Content Area */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeAdminTab}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="bg-white/95 backdrop-blur-md rounded-[2.5rem] shadow-2xl p-8 border border-white/20 min-h-[400px]"
+                >
+                  {activeAdminTab === 'dashboard' ? (
+                    <AdminDashboard registrations={userRegistrations} />
+                  ) : (
+                    <RegistrationsTable 
+                      registrations={userRegistrations} 
+                      isAdmin={true} 
+                      onEdit={setEditingRegistration}
+                      onDelete={handleDeleteRegistration}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Bottom Credits & Navigation */}
+              <div className="text-center pb-8 flex flex-col items-center gap-4">
+                <button 
+                  onClick={() => {
+                    setViewRole('landing');
+                    setIsAdminGatePassed(false);
+                  }}
+                  className="px-8 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-2xl text-xs font-bold hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 group"
+                >
+                  <Home className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  الرجوع للقائمة الرئيسية
+                </button>
+                <p className="text-white/30 text-[10px] font-black uppercase tracking-widest">من إنتاج : رشيد الهاريوي</p>
+              </div>
+
+              {/* Extra Hero Section (Matching bottom of image) */}
+              <div className="bg-[#1e3a8a] p-12 rounded-[3rem] text-center text-white border border-white/5 shadow-inner">
+                <div className="flex flex-col items-center gap-6">
+                  <div className="p-4 bg-white/10 rounded-2xl">
+                    <SchoolIcon className="w-12 h-12 text-blue-200" />
+                  </div>
+                  <h2 className="text-5xl font-black leading-tight">نظام إدارة<br />التسجيلات</h2>
+                  <p className="text-blue-100/80 max-w-xl mx-auto leading-relaxed">
+                    نظام التوجيه المدرسي بمنطقة المحاميد مراكش
                   </p>
                 </div>
               </div>
             </div>
-
-                    <div className="flex items-center gap-2">
-              {viewRole === 'admin' && (
-                user ? (
-                  <div className="flex items-center gap-3 bg-gray-50 pr-4 pl-1 py-1 rounded-full border border-gray-200">
-                    <div className="text-left hidden sm:block">
-                      <p className="text-[10px] font-black text-blue-600 uppercase leading-none mb-0.5 tracking-tighter">
-                        {isAdmin ? 'المسؤول' : 'مستخدم'}
-                      </p>
-                      <p className="text-xs font-bold text-gray-700 leading-none">{user.displayName}</p>
-                    </div>
-                    <img src={user.photoURL || ''} alt={user.displayName || ''} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
-                  </div>
-                ) : (
-                  <button 
-                    onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
-                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-slate-900 transition-all"
-                  >
-                    <User className="w-4 h-4" />
-                    <span className="hidden sm:inline">دخول المسؤول</span>
-                  </button>
-                )
-              )}
-              
-              <button 
-                onClick={() => {
-                  setViewRole('landing');
-                  setIsAdminGatePassed(false);
-                  setAdminGateData({ username: '', password: '' });
-                }}
-                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                title="الرجوع للقائمة"
-              >
-                <ArrowRight className="w-5 h-5 rotate-180" />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
-          <div className="grid lg:grid-cols-12 gap-8">
-            
-            {/* Sidebar (Search & Controls) */}
-            <div className="lg:col-span-4 space-y-6 order-2 lg:order-1">
-              
-              <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
-                  <Search className="w-5 h-5 text-blue-600" />
-                  تحديد موقع السكن
-                </h2>
-                
-                <div className="space-y-4">
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                      placeholder="ابحث عن عنوانك (مثال: بوعكاز)"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    />
-                    <button 
-                      onClick={handleSearch}
-                      className="absolute left-2 top-2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      <Search className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={getCurrentLocation}
-                      className="flex items-center justify-center gap-2 py-2.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-xl border border-blue-100 hover:bg-blue-100 transition-all"
-                    >
-                      <Navigation2 className="w-4 h-4" />
-                      موقعي الحالي
-                    </button>
-                    <button 
-                      onClick={() => setIsManualPicking(!isManualPicking)}
-                      className={`flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl border transition-all ${
-                        isManualPicking 
-                          ? 'bg-amber-100 text-amber-700 border-amber-300 ring-2 ring-amber-200 shadow-sm' 
-                          : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'
-                      }`}
-                    >
-                      <MapPin className={`w-4 h-4 ${isManualPicking ? 'animate-bounce' : ''}`} />
-                      {isManualPicking ? 'انقر على الخريطة' : 'تحديد يدوي'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-start gap-3 bg-amber-50 p-4 rounded-xl border border-amber-100">
-                  <Info className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                      حدد موقعك على الخريطة وسنقوم بترتيب الإعداديات القريبة منك وحساب مدة المشي الفعلية.
-                    </p>
-                    <p className="text-[9px] text-amber-600 font-bold">
-                      ملاحظة: تأكد من تفعيل Distance Matrix API و Geocoding API في لوحة تحكم Google Cloud.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-800">الإعداديات المتاحة</h2>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{schoolsWithInfo.length || SCHOOLS.length} مدرسة</span>
-                </div>
-                
-                <div className="h-[400px] overflow-y-auto pr-1 space-y-1 custom-scrollbar">
-                  {((schoolsWithInfo.length > 0 ? schoolsWithInfo : SCHOOLS) as (SchoolData & { distance?: string; duration?: string })[]).map((school) => (
-                    <SchoolCard 
-                      key={school.id}
-                      school={school}
-                      isActive={selectedSchool?.id === school.id}
-                      distance={school.distance}
-                      duration={school.duration}
-                      onClick={() => setSelectedSchool(school)}
-                    />
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            {/* Map & Registration Form Area */}
-            <div className="lg:col-span-8 flex flex-col gap-6 order-1 lg:order-2">
-              
-              {/* Map Container */}
-              <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 h-[500px] relative overflow-hidden">
-                    <Map
-                      defaultCenter={MHAMID_CENTER}
-                      defaultZoom={15}
-                      gestureHandling="greedy"
-                      zoomControl={true}
-                      mapTypeControl={false}
-                      streetViewControl={false}
-                      fullscreenControl={false}
-                      mapId="MAIN_MAP"
-                      onClick={e => {
-                        if (e.detail.latLng) {
-                          setUserLocation(e.detail.latLng);
-                          setIsManualPicking(false);
-                        }
-                      }}
-                    >
-                      {/* Camera Management */}
-                      {selectedSchool ? (
-                        <CameraHandler center={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} zoom={16} />
-                      ) : userLocation ? (
-                        <CameraHandler center={userLocation} />
-                      ) : null}
-
-                      {userLocation && selectedSchool && (
-                      <Directions 
-                        origin={userLocation} 
-                        destination={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} 
+          ) : (
+            <>
+            <div className="space-y-8">
+                {/* 1. تحديد موقع السكن */}
+                <div className="max-w-xl mx-auto w-full">
+                  <section className="bg-white p-6 rounded-3xl shadow-xl border border-blue-50">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+                      <Search className="w-5 h-5 text-blue-600" />
+                      تحديد موقع السكن
+                    </h2>
+                    <div className="space-y-4">
+                      <input 
+                        type="text" 
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                        placeholder="ابحث عن عنوانك (مثال: بوعكاز)"
+                        className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:border-blue-500 outline-none transition-all"
                       />
-                    )}
-                    {isManualPicking && (
-                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                        <div className="bg-amber-600 text-white px-4 py-2 rounded-full shadow-lg font-bold text-xs animate-pulse flex items-center gap-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button onClick={getCurrentLocation} className="flex items-center justify-center gap-2 py-3 bg-blue-50 text-blue-600 text-xs font-bold rounded-2xl hover:bg-blue-100 transition-all">
+                          <Navigation2 className="w-4 h-4" />
+                          موقعي
+                        </button>
+                        <button onClick={() => setIsManualPicking(!isManualPicking)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 text-slate-600 text-xs font-bold rounded-2xl hover:bg-slate-100 transition-all border border-slate-100">
                           <MapPin className="w-4 h-4" />
-                          انقر على موقع منزلك في الخريطة
-                        </div>
+                          تحديد يدوي
+                        </button>
                       </div>
-                    )}
-                  {userLocation && (
-                    <Marker 
-                      position={userLocation} 
-                      title="موقعك"
-                      icon={{
-                        url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                      }}
-                    />
-                  )}
-                  {SCHOOLS.map(s => (
-                    <Marker 
-                      key={s.id} 
-                      position={{lat: s.lat, lng: s.lng}} 
-                      title={s.name}
-                      onClick={() => setSelectedSchool(s)}
-                    />
-                  ))}
-                </Map>
-                
-                {loading && (
-                  <div className="absolute inset-0 bg-white/20 backdrop-blur-[1px] flex justify-center items-center">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                    </div>
+                  </section>
+                </div>
+
+                {/* 2. الخريطة */}
+                <div className="map-container h-[400px]">
+                  <Map defaultCenter={MHAMID_CENTER} defaultZoom={15} mapId="MAIN_MAP" onClick={e => { if (e.detail.latLng) setUserLocation(e.detail.latLng); setIsManualPicking(false); }}>
+                    {selectedSchool ? <CameraHandler center={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} zoom={16} /> : userLocation ? <CameraHandler center={userLocation} /> : null}
+                    {userLocation && selectedSchool && <Directions origin={userLocation} destination={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} />}
+                    {userLocation && <Marker position={userLocation} title="موقعك" icon={{ url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }} />}
+                    {SCHOOLS.map(s => <Marker key={s.id} position={{lat: s.lat, lng: s.lng}} title={s.name} onClick={() => setSelectedSchool(s)} />)}
+                  </Map>
+                </div>
+
+                <div className="grid lg:grid-cols-12 gap-8 items-start">
+                  {/* 3. تسجيل التلاميذ */}
+                  <div className="lg:col-span-8">
+                    <AnimatePresence mode="wait">
+                      {isSuccess ? (
+                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-green-600 p-12 rounded-[2.5rem] text-white text-center shadow-2xl flex flex-col items-center gap-6">
+                          <CheckCircle2 className="w-20 h-20" />
+                          <h2 className="text-4xl font-black">تم التسجيل بنجاح!</h2>
+                          <button onClick={() => setIsSuccess(false)} className="px-12 py-3 bg-white text-green-600 rounded-full font-bold hover:bg-green-50 transition-colors shadow-lg">تسجيل جديد</button>
+                        </motion.div>
+                      ) : (
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                          <RegistrationForm selectedSchool={selectedSchool?.name || ''} onSuccess={() => setIsSuccess(true)} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                )}
+
+                  {/* 4. الإعداديات المتاحة */}
+                  <div className="lg:col-span-4 lg:sticky lg:top-8">
+                    <section className="bg-white p-6 rounded-3xl shadow-xl border border-blue-50 max-h-[600px] overflow-hidden flex flex-col">
+                      <h2 className="text-lg font-bold mb-4 text-slate-800">الإعداديات المتاحة</h2>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
+                        {((schoolsWithInfo.length > 0 ? schoolsWithInfo : SCHOOLS) as any[]).map((school) => (
+                          <SchoolCard key={school.id} school={school} isActive={selectedSchool?.id === school.id} distance={school.distance} duration={school.duration} onClick={() => setSelectedSchool(school)} />
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+                </div>
               </div>
 
-              {/* Registration Form / Success State */}
-              <AnimatePresence mode="wait">
-                {isSuccess ? (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-green-600 p-8 rounded-2xl text-white text-center shadow-xl flex flex-col items-center gap-4"
-                  >
-                    <CheckCircle2 className="w-16 h-16" />
-                    <div>
-                      <h2 className="text-3xl font-bold mb-2">تم التسجيل بنجاح!</h2>
-                      <p className="opacity-90">سيتواصل معك الطاقم الإداري للإعدادية {selectedSchool?.name} في أقرب وقت.</p>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        setIsSuccess(false);
-                      }}
-                      className="mt-4 px-8 py-2 bg-white text-green-600 rounded-full font-bold hover:bg-green-50 transition-colors"
-                    >
-                      تسجيل جديد
-                    </button>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                  >
-                    <RegistrationForm 
-                      selectedSchool={selectedSchool?.name || ''} 
-                      onSuccess={() => setIsSuccess(true)}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-            </div>
-          </div>
-
-          <RegistrationsTable registrations={userRegistrations} isAdmin={isAdmin && viewRole === 'admin'} />
+              <div className="mt-12 flex justify-center">
+                 <button 
+                  onClick={() => setViewRole('landing')}
+                  className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold flex items-center gap-2 shadow-xl hover:bg-slate-800 transition-all"
+                >
+                  <ArrowRight className="w-5 h-5 rotate-180" />
+                  رجوع للقائمة الرئيسية
+                </button>
+              </div>
+            </>
+          )}
         </main>
 
-        <footer className="max-w-7xl mx-auto px-8 py-12 text-center text-gray-400 text-xs">
+        <AnimatePresence>
+          {editingRegistration && (
+            <EditRegistrationModal 
+              registration={editingRegistration}
+              onClose={() => setEditingRegistration(null)}
+              onUpdate={handleUpdateRegistration}
+            />
+          )}
+        </AnimatePresence>
+
+        <footer className="py-12 border-t border-slate-100 text-center text-slate-400 text-xs bg-white">
           <p>© 2026 إعداديتي القريبة - نظام التوجيه المدرسي الذكي لمنطقة المحاميد</p>
-          <p className="mt-2">جميع الحقوق محفوظة - مقاطعة المنارة مراكش</p>
+          <div className="mt-4 flex justify-center gap-6 grayscale opacity-50">
+            <GraduationCap className="w-6 h-6" />
+            <Home className="w-6 h-6" />
+            <Users className="w-6 h-6" />
+          </div>
         </footer>
 
       </APIProvider>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f1f1;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
-        }
-      `}</style>
     </div>
   );
 }
