@@ -21,15 +21,15 @@ service cloud.firestore {
 
     // Registration validation
     function isValidRegistration(data) {
-      return data.keys().hasAll(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'createdAt'])
-        && data.keys().size() == 7
-        && data.firstName is string && data.firstName.size() <= 100
+      return data.firstName is string && data.firstName.size() <= 100
         && data.lastName is string && data.lastName.size() <= 100
         && data.gradeLevel is string && data.gradeLevel.size() <= 50
         && data.phone is string && data.phone.size() <= 20
         && data.address is string && data.address.size() <= 250
         && data.chosenSchool is string && data.chosenSchool.size() <= 100
-        && data.createdAt == request.time;
+        && data.choice1 is string && data.choice1.size() <= 100
+        && data.choice2 is string && data.choice2.size() <= 100
+        && data.choice3 is string && data.choice3.size() <= 100;
     }
 
     function isAdmin() {
@@ -39,8 +39,34 @@ service cloud.firestore {
     }
 
     match /registrations/{registrationId} {
-      allow create: if isValidRegistration(request.resource.data);
-      allow list, get, update, delete: if isAdmin();
+      allow create: if isValidId(registrationId) && 
+                      incoming().keys().hasAll(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'choice1', 'choice2', 'choice3', 'createdAt']) &&
+                      incoming().keys().size() == 10 &&
+                      isValidRegistration(incoming()) &&
+                      incoming().createdAt == request.time;
+      
+      allow list, get: if true;
+      
+      allow update: if (isAdmin() || isAdminEmail()) &&
+                      isValidId(registrationId) &&
+                      isValidRegistration(incoming()) &&
+                      incoming().updatedAt == request.time &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'choice1', 'choice2', 'choice3', 'updatedAt', 'deletedAt']);
+      
+      allow delete: if (isAdmin() || isAdminEmail()) && isValidId(registrationId);
+    }
+
+    function isAdminEmail() {
+      return isSignedIn() && request.auth.token.email == 'rrachidv4@gmail.com';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
     }
 
     match /stats/{schoolId} {

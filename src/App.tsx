@@ -36,7 +36,8 @@ import {
   PieChart as PieChartIcon,
   Activity,
   TrendingUp,
-  LayoutDashboard
+  LayoutDashboard,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -57,6 +58,7 @@ import {
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut, 
+  signInAnonymously,
   User as FirebaseUser 
 } from 'firebase/auth';
 import { 
@@ -104,6 +106,9 @@ interface RegistrationFormInput {
   phone: string;
   address: string;
   chosenSchool: string;
+  choice1: string;
+  choice2: string;
+  choice3: string;
 }
 
 // --- Utils ---
@@ -136,6 +141,8 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [polyline, setPolyline] = useState<google.maps.Polyline | null>(null);
+
   useEffect(() => {
     if (!map) return;
     try {
@@ -150,16 +157,26 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
         }
       });
       setDirectionsRenderer(renderer);
+
+      const line = new google.maps.Polyline({
+        map,
+        strokeColor: '#3b82f6',
+        strokeWeight: 4,
+        strokeOpacity: 0.6,
+        visible: false
+      });
+      setPolyline(line);
     } catch (e) {
       console.error("Failed to initialize Directions Service:", e);
     }
     return () => {
       if (directionsRenderer) directionsRenderer.setMap(null);
+      if (polyline) polyline.setMap(null);
     };
   }, [map]);
 
   useEffect(() => {
-    if (!directionsService || !directionsRenderer) return;
+    if (!directionsService || !directionsRenderer || !polyline) return;
 
     directionsService.route(
       {
@@ -170,19 +187,22 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
           directionsRenderer.setDirections(result);
+          polyline.setVisible(false);
           setError(null);
         } else {
-          console.error("Directions Request Failed:", status);
-          setError(status);
+          // Fallback to straight line
           directionsRenderer.setDirections({ routes: [] } as any);
+          polyline.setPath([origin, destination]);
+          polyline.setVisible(true);
+
+          if (status !== 'REQUEST_DENIED') {
+            console.warn("Directions Request Failed:", status);
+          }
+          setError(status);
         }
       }
     );
-  }, [directionsService, directionsRenderer, origin, destination]);
-
-  if (error === 'REQUEST_DENIED') {
-    return null;
-  }
+  }, [directionsService, directionsRenderer, polyline, origin, destination]);
 
   return null;
 };
@@ -257,7 +277,7 @@ const SchoolCard = ({
   );
 };
 
-const AdminDashboard = ({ registrations }: { registrations: RegistrationData[] }) => {
+const AdminDashboard = ({ registrations, userRole }: { registrations: RegistrationData[], userRole: 'admin' | 'staff' | 'landing' }) => {
   const schoolCount = SCHOOLS.map(school => ({
     name: school.name,
     count: registrations.filter(r => r.chosenSchool === school.name).length
@@ -273,6 +293,17 @@ const AdminDashboard = ({ registrations }: { registrations: RegistrationData[] }
 
   return (
     <div className="space-y-8 py-6">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-black text-slate-800">
+          {userRole === 'admin' ? 'لوحة تحكم المسؤول' : 'لوحة تحكم المساعد (Staff)'}
+        </h2>
+        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-sm ${
+          userRole === 'admin' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white'
+        }`}>
+          {userRole === 'admin' ? 'Full Access' : 'View Only Mode'}
+        </span>
+      </div>
+      
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <motion.div 
@@ -449,19 +480,21 @@ const AdminDashboard = ({ registrations }: { registrations: RegistrationData[] }
 
 const RegistrationsTable = ({ 
   registrations, 
-  isAdmin, 
+  userRole, 
   onEdit, 
   onDelete 
 }: { 
   registrations: RegistrationData[], 
-  isAdmin: boolean,
+  userRole: 'admin' | 'staff' | 'landing',
   onEdit: (reg: RegistrationData) => void,
   onDelete: (id: string) => void
 }) => {
-  if (!isAdmin || registrations.length === 0) return null;
+  if (userRole === 'landing' || registrations.length === 0) return null;
 
-  const handleWhatsApp = (reg: RegistrationData) => {
-    const message = `السلام عليكم ورحمة الله،\n\nنخبركم أنه تم قبول ملف التلميذ(ة) ${reg.firstName} ${reg.lastName} للتسجيل في ${reg.chosenSchool} للموسم الدراسي المقبل.\n\nالمرجو الالتحاق بالمؤسسة لاستكمال إجراءات التسجيل.\n\nمع التحية.`;
+  const canEditDelete = userRole === 'admin';
+
+  const handleWhatsApp = (reg: RegistrationData, selectedSchool: string) => {
+    const message = `السلام عليكم ورحمة الله،\n\nنخبركم أنه تم قبول ملف التلميذ(ة) ${reg.firstName} ${reg.lastName} للتسجيل في ${selectedSchool} للموسم الدراسي المقبل.\n\nالمرجو الالتحاق بالمؤسسة لاستكمال إجراءات التسجيل.\n\nمع التحية.`;
     const encodedMessage = encodeURIComponent(message);
     let phone = reg.phone.replace(/\s+/g, '');
     if (phone.startsWith('0')) {
@@ -473,13 +506,57 @@ const RegistrationsTable = ({
     window.open(whatsappUrl, '_blank');
   };
 
+  const WhatsAppMenu = ({ reg }: { reg: RegistrationData }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const choices = [reg.choice1, reg.choice2, reg.choice3].filter(Boolean);
+
+    return (
+      <div className="relative">
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1"
+          title="مراسلة واتساب"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <ChevronDown className="w-3 h-3" />
+        </button>
+
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <div className="absolute left-0 bottom-full mb-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden py-1">
+              <div className="px-3 py-1.5 text-[9px] uppercase font-bold text-gray-400 bg-gray-50/50">اختر المؤسسة:</div>
+              {choices.map((choice, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    handleWhatsApp(reg, choice);
+                    setIsOpen(false);
+                  }}
+                  className="w-full text-right px-4 py-2 text-xs hover:bg-blue-50 text-gray-700 transition-colors block border-b border-gray-50 last:border-0"
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="mt-12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-green-600" />
-          تتبع جميع التسجيلات (للمسؤول)
-        </h2>
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            {userRole === 'admin' ? 'تتبع جميع التسجيلات (للمسؤول)' : 'لائحة التسجيلات (للمساعد)'}
+          </h2>
+          <p className="text-[10px] text-gray-400 font-medium mr-7">
+            {userRole === 'admin' ? 'لديك صلاحيات كاملة للتعديل والحذف' : 'وضع المساعد: يمكنك المراسلة عبر واتساب فقط'}
+          </p>
+        </div>
         <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
           {registrations.length} تسجيل إجمالي
         </span>
@@ -492,6 +569,7 @@ const RegistrationsTable = ({
               <th className="px-6 py-4">المستوى</th>
               <th className="px-6 py-4">الهاتف</th>
               <th className="px-6 py-4">المؤسسة المختارة</th>
+              <th className="px-6 py-4 text-xs">خيارات إضافية</th>
               <th className="px-6 py-4">الحالة</th>
               <th className="px-6 py-4">الإجراءات</th>
             </tr>
@@ -512,6 +590,12 @@ const RegistrationsTable = ({
                   </span>
                 </td>
                 <td className="px-6 py-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded italic">{reg.choice2}</span>
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded italic">{reg.choice3}</span>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold border border-green-100">
                     <CheckCircle2 className="w-3 h-3" />
                     مقبول
@@ -519,32 +603,30 @@ const RegistrationsTable = ({
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleWhatsApp(reg)}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="مراسلة واتساب"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => onEdit(reg)}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title="تعديل"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Removed confirm dialog for cleaner UX
-                        onDelete(reg.id);
-                      }}
-                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-                      title="حذف"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <WhatsAppMenu reg={reg} />
+                    
+                    {canEditDelete && (
+                      <>
+                        <button 
+                          onClick={() => onEdit(reg)}
+                          className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          title="تعديل"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDelete(reg.id);
+                          }}
+                          className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -557,10 +639,10 @@ const RegistrationsTable = ({
 };
 
 const RegistrationForm = ({ 
-  selectedSchool, 
+  selectedSchools, 
   onSuccess 
 }: { 
-  selectedSchool: string; 
+  selectedSchools: string[]; 
   onSuccess: () => void;
 }) => {
   const [formData, setFormData] = useState<RegistrationFormInput>({
@@ -569,14 +651,23 @@ const RegistrationForm = ({
     gradeLevel: 'السنة الأولى إعدادي',
     phone: '',
     address: '',
-    chosenSchool: selectedSchool
+    chosenSchool: selectedSchools[0] || '',
+    choice1: selectedSchools[0] || '',
+    choice2: selectedSchools[1] || '',
+    choice3: selectedSchools[2] || ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setFormData(prev => ({ ...prev, chosenSchool: selectedSchool }));
-  }, [selectedSchool]);
+    setFormData(prev => ({ 
+      ...prev, 
+      chosenSchool: selectedSchools[0] || '',
+      choice1: selectedSchools[0] || '',
+      choice2: selectedSchools[1] || '',
+      choice3: selectedSchools[2] || ''
+    }));
+  }, [selectedSchools]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -599,7 +690,10 @@ const RegistrationForm = ({
         gradeLevel: 'السنة الأولى إعدادي',
         phone: '',
         address: '',
-        chosenSchool: selectedSchool
+        chosenSchool: selectedSchools[0] || '',
+        choice1: selectedSchools[0] || '',
+        choice2: selectedSchools[1] || '',
+        choice3: selectedSchools[2] || ''
       });
       onSuccess();
     } catch (err: any) {
@@ -686,14 +780,24 @@ const RegistrationForm = ({
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-600">الإعدادية المختارة</label>
-          <input 
-            readOnly 
-            type="text" 
-            value={formData.chosenSchool || 'الرجاء اختيار إعدادية من الخريطة'} 
-            className={`w-full px-3 py-2 border rounded-lg text-sm bg-gray-100 ${!formData.chosenSchool ? 'border-red-300 text-red-500 font-bold' : 'border-gray-200 text-gray-800'}`}
-          />
+        <div className="space-y-4 pt-2">
+          <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+            <p className="text-[10px] font-bold text-blue-600 mb-2 uppercase tracking-wider">الإعداديات الثلاث الأقرب (تلقائياً)</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-blue-200">
+                <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">1</span>
+                <span className="text-xs font-bold text-gray-800">{formData.choice1 || '...'}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-blue-200">
+                <span className="w-5 h-5 bg-blue-400 text-white rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                <span className="text-xs font-bold text-gray-800">{formData.choice2 || '...'}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-blue-200">
+                <span className="w-5 h-5 bg-blue-300 text-white rounded-full flex items-center justify-center text-[10px] font-bold">3</span>
+                <span className="text-xs font-bold text-gray-800">{formData.choice3 || '...'}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -735,7 +839,10 @@ const EditRegistrationModal = ({
       gradeLevel: formData.gradeLevel,
       phone: formData.phone,
       address: formData.address,
-      chosenSchool: formData.chosenSchool
+      chosenSchool: formData.chosenSchool,
+      choice1: formData.choice1,
+      choice2: formData.choice2,
+      choice3: formData.choice3
     });
     setLoading(false);
     onClose();
@@ -849,8 +956,10 @@ const EditRegistrationModal = ({
 };
 
 const ADMIN_EMAILS = ['rrachidv4@gmail.com'];
-const ADMIN_LOCAL_USER = 'admin';
-const ADMIN_LOCAL_PASS = 'Mhamid2024';
+const ADMIN_USER = 'admin';
+const ADMIN_PASS = 'Mhamid2024';
+const STAFF_USER = 'staff';
+const STAFF_PASS = 'Staff2024';
 
 interface FirestoreErrorInfo {
   error: string;
@@ -892,14 +1001,23 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 export default function App() {
-  const [viewRole, setViewRole] = useState<'landing' | 'admin' | 'user' | 'admin_gate'>(() => 'landing');
+  const [viewRole, setViewRole] = useState<'landing' | 'admin_dashboard' | 'user' | 'admin_gate'>(() => 'landing');
   const [activeAdminTab, setActiveAdminTab] = useState<'registrations' | 'dashboard'>('dashboard');
-  const [isAdminGatePassed, setIsAdminGatePassed] = useState(false);
+  const [adminLocalRole, setAdminLocalRole] = useState(false);
+  const [staffRole, setStaffRole] = useState(false);
   const [adminGateData, setAdminGateData] = useState({ username: '', password: '' });
   const [adminGateError, setAdminGateError] = useState('');
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const isAdmin = useMemo(() => user && ADMIN_EMAILS.includes(user.email || ''), [user]);
+  
+  const userRole = useMemo(() => {
+    if (adminLocalRole) return 'admin';
+    if (staffRole) return 'staff';
+    if (user && ADMIN_EMAILS.includes(user.email || '')) return 'admin';
+    return 'landing';
+  }, [user, staffRole, adminLocalRole]);
+
+  const hasAdminAccess = userRole === 'admin' || userRole === 'staff';
   const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [selectedSchool, setSelectedSchool] = useState<SchoolData | null>(null);
   const [schoolsWithInfo, setSchoolsWithInfo] = useState<(SchoolData & { distance?: string; duration?: string; distanceValue?: number })[]>([]);
@@ -912,6 +1030,7 @@ export default function App() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [isManualPicking, setIsManualPicking] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<RegistrationData | null>(null);
+  const [distanceServiceDenied, setDistanceServiceDenied] = useState(false);
 
   const handleDeleteRegistration = async (id: string) => {
     try {
@@ -949,8 +1068,8 @@ export default function App() {
     let unsubscribeRegistrations = () => {};
     let unsubscribeStats = () => {};
 
-    if (isAdmin) {
-      // Fetch all registrations for admin
+    if (hasAdminAccess) {
+      // Fetch all registrations for admin/staff
       const q = query(
         collection(db, 'registrations'), 
         where('deletedAt', '==', null),
@@ -994,7 +1113,7 @@ export default function App() {
       unsubscribeRegistrations();
       unsubscribeStats();
     };
-  }, [user, isAdmin]);
+  }, [user, hasAdminAccess]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery) return;
@@ -1031,45 +1150,68 @@ export default function App() {
   useEffect(() => {
     if (!userLocation) return;
     
-    const service = new google.maps.DistanceMatrixService();
-    const destinations = SCHOOLS.map(s => ({ lat: s.lat, lng: s.lng }));
+    if (distanceServiceDenied) {
+      // Direct fallback if already denied
+      const info = SCHOOLS.map(s => {
+        const distKm = calculateHaversine(userLocation.lat, userLocation.lng, s.lat, s.lng);
+        return {
+          ...s,
+          distance: distKm.toFixed(2) + ' كم',
+          duration: Math.round(distKm * 12) + ' دقيقة', // Approx 5km/h walking
+          distanceValue: distKm * 1000
+        };
+      });
+      const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+      setSchoolsWithInfo(sorted);
+      setSelectedSchool(sorted[0]);
+      return;
+    }
 
-    service.getDistanceMatrix({
-      origins: [userLocation],
-      destinations: destinations,
-      travelMode: google.maps.TravelMode.WALKING,
-    }, (response, status) => {
-      if (status === 'OK' && response) {
-        const info = response.rows[0].elements.map((el, i) => ({
-          ...SCHOOLS[i],
-          distance: el.distance?.text,
-          duration: el.duration?.text,
-          distanceValue: el.distance?.value
-        }));
-        
-        const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
-        setSchoolsWithInfo(sorted);
-        // Force select the nearest school when location is set
-        setSelectedSchool(sorted[0]);
-      } else {
-        console.warn('Distance Matrix failed or not enabled:', status);
-        // Fallback to Haversine calculation
-        const info = SCHOOLS.map(s => {
-          const distKm = calculateHaversine(userLocation.lat, userLocation.lng, s.lat, s.lng);
-          return {
-            ...s,
-            distance: distKm.toFixed(2) + ' كم',
-            duration: Math.round(distKm * 12) + ' دقيقة', // Approx 5km/h walking
-            distanceValue: distKm * 1000
-          };
-        });
-        const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
-        setSchoolsWithInfo(sorted);
-        // Force select the nearest school
-        setSelectedSchool(sorted[0]);
-      }
-    });
-  }, [userLocation]);
+    try {
+      const service = new google.maps.DistanceMatrixService();
+      const destinations = SCHOOLS.map(s => ({ lat: s.lat, lng: s.lng }));
+
+      service.getDistanceMatrix({
+        origins: [userLocation],
+        destinations: destinations,
+        travelMode: google.maps.TravelMode.WALKING,
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const info = response.rows[0].elements.map((el, i) => ({
+            ...SCHOOLS[i],
+            distance: el.distance?.text,
+            duration: el.duration?.text,
+            distanceValue: el.distance?.value
+          }));
+          
+          const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+          setSchoolsWithInfo(sorted);
+          setSelectedSchool(sorted[0]);
+        } else {
+          if (status === 'REQUEST_DENIED') {
+            setDistanceServiceDenied(true);
+          } else {
+            console.warn('Distance Matrix failed:', status);
+          }
+          // Fallback to Haversine calculation
+          const info = SCHOOLS.map(s => {
+            const distKm = calculateHaversine(userLocation.lat, userLocation.lng, s.lat, s.lng);
+            return {
+              ...s,
+              distance: distKm.toFixed(2) + ' كم',
+              duration: Math.round(distKm * 12) + ' دقيقة', // Approx 5km/h walking
+              distanceValue: distKm * 1000
+            };
+          });
+          const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+          setSchoolsWithInfo(sorted);
+          setSelectedSchool(sorted[0]);
+        }
+      });
+    } catch (e) {
+      setDistanceServiceDenied(true);
+    }
+  }, [userLocation, distanceServiceDenied]);
 
   if (viewRole === 'landing') {
     return (
@@ -1097,12 +1239,10 @@ export default function App() {
 
             <button 
               onClick={() => setViewRole('admin_gate')}
-              className="w-full group relative overflow-hidden bg-blue-900/40 border border-white/10 text-white p-6 rounded-3xl transition-all hover:bg-blue-900/60 hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full group relative overflow-hidden bg-blue-600 text-white p-6 rounded-3xl transition-all hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-3"
             >
-              <div className="flex items-center justify-center gap-3">
-                <ShieldCheck className="w-6 h-6 text-blue-300" />
-                <span className="text-xl font-bold">فضاء المسؤول</span>
-              </div>
+              <ShieldCheck className="w-6 h-6" />
+              <span className="text-xl font-bold">فضاء المسؤول (Personnel Area)</span>
             </button>
           </div>
 
@@ -1131,16 +1271,21 @@ export default function App() {
           </button>
 
           <div className="mb-8">
-            <h2 className="text-2xl font-black text-white">دخول المسؤول</h2>
+            <h2 className="text-2xl font-black text-white">دخول النظام</h2>
             <p className="text-sm text-blue-100/60">أدخل معلومات الحساب للمتابعة</p>
           </div>
 
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              if (adminGateData.username === ADMIN_LOCAL_USER && adminGateData.password === ADMIN_LOCAL_PASS) {
-                setViewRole('admin');
-                setIsAdminGatePassed(true);
+              if (adminGateData.username === ADMIN_USER && adminGateData.password === ADMIN_PASS) {
+                setAdminLocalRole(true);
+                setStaffRole(false);
+                setViewRole('admin_dashboard');
+              } else if (adminGateData.username === STAFF_USER && adminGateData.password === STAFF_PASS) {
+                setStaffRole(true);
+                setAdminLocalRole(false);
+                setViewRole('admin_dashboard');
               } else {
                 setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة');
               }
@@ -1190,26 +1335,50 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen ${viewRole === 'admin' || viewRole === 'admin_gate' ? 'launcher-bg' : 'bg-slate-200'} text-gray-900 font-sans transition-colors duration-500`} dir="rtl">
+    <div className={`min-h-screen ${hasAdminAccess || viewRole === 'admin_gate' ? 'launcher-bg' : 'bg-slate-200'} text-gray-900 font-sans transition-colors duration-500`} dir="rtl">
       <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar">
         
         {/* Profile / Logout Widget (Floating) */}
         <AnimatePresence>
-          {viewRole === 'admin' && user && (
+          {hasAdminAccess && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               className="fixed top-6 left-6 z-[100] flex flex-col items-center gap-2"
             >
               <div className="profile-card p-4 rounded-3xl flex flex-col items-center gap-2 shadow-2xl">
-                <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden shadow-inner">
-                  <img src={user.photoURL || ''} alt="" className="w-full h-full object-cover" />
+                <div className="w-16 h-16 rounded-full border-4 border-white/20 overflow-hidden shadow-inner flex items-center justify-center bg-white/10">
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-8 h-8 text-white/50" />
+                  )}
                 </div>
                 <div className="text-center">
-                  <p className="text-white font-bold text-sm">{user.displayName || 'هيا نتعلم'}</p>
+                  <p className="text-white font-bold text-sm">{user?.displayName || (userRole === 'admin' ? 'مدير النظام' : 'مساعد النظام')}</p>
+                  <p className="text-blue-200 text-[9px] font-bold mb-1 opacity-60">
+                    {userRole === 'admin' ? 'مسؤول (Full Admin)' : 'مساعد (Staff User)'}
+                  </p>
                   <div className="flex flex-col items-center gap-1 mt-1">
+                    {userRole === 'admin' && !user && (
+                      <button 
+                        onClick={() => {
+                          const provider = new GoogleAuthProvider();
+                          signInWithPopup(auth, provider).catch(console.error);
+                        }}
+                        className="bg-blue-600 text-white text-[9px] px-3 py-1 rounded-full font-bold hover:bg-blue-700 transition-all flex items-center gap-1 mb-1"
+                      >
+                        <ShieldCheck className="w-2.5 h-2.5" />
+                        ربط حساب Google
+                      </button>
+                    )}
                     <button 
-                      onClick={() => signOut(auth)}
+                      onClick={() => {
+                        signOut(auth);
+                        setStaffRole(false);
+                        setAdminLocalRole(false);
+                        setViewRole('landing');
+                      }}
                       className="text-orange-400 text-[10px] font-bold hover:text-orange-300 transition-colors"
                     >
                       تسجيل الخروج
@@ -1217,7 +1386,6 @@ export default function App() {
                     <button 
                       onClick={() => {
                         setViewRole('landing');
-                        setIsAdminGatePassed(false);
                       }}
                       className="text-white/40 text-[9px] font-bold hover:text-white transition-colors flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/5"
                     >
@@ -1240,7 +1408,7 @@ export default function App() {
             </h1>
             <p className="text-blue-100/60 text-sm font-medium -mt-4">نظام التوجيه المدرسي بمنطقة المحاميد مراكش</p>
 
-            {viewRole === 'admin' && (
+            {userRole === 'admin' && (
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1250,11 +1418,23 @@ export default function App() {
                 <span>دليل الاستخدام وملاحظات</span>
               </motion.div>
             )}
+
+            <button 
+              onClick={() => {
+                setAdminLocalRole(false);
+                setStaffRole(false);
+                setViewRole('landing');
+              }}
+              className="absolute top-8 left-8 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all group"
+              title="تسجيل الخروج"
+            >
+              <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+            </button>
           </div>
         </header>
 
         <main className="max-w-5xl mx-auto p-6 md:p-8">
-          {viewRole === 'admin' ? (
+          {hasAdminAccess && viewRole === 'admin_dashboard' ? (
             <div className="space-y-12">
               {/* Launcher Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1283,29 +1463,6 @@ export default function App() {
                     <p className="text-[10px] opacity-60">تدبير التسجيلات والمتابعة</p>
                   </div>
                 </button>
-
-                <button 
-                  onClick={() => setActiveAdminTab('dashboard')}
-                  className={`launcher-button ${activeAdminTab === 'dashboard' ? 'active' : ''}`}
-                >
-                  <div className="p-3 rounded-xl bg-green-100/10">
-                    <BarChart3 className={`w-6 h-6 ${activeAdminTab === 'dashboard' ? 'text-blue-900' : 'text-white'}`} />
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg">إحصائيات</p>
-                    <p className="text-[10px] opacity-60">تتبع تسجيلات التلاميذ</p>
-                  </div>
-                </button>
-
-                <button className="launcher-button">
-                  <div className="p-3 rounded-xl bg-pink-100/10">
-                    <X className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg">الإعدادات</p>
-                    <p className="text-[10px] opacity-60">تخصيص النظام والمستخدمين</p>
-                  </div>
-                </button>
               </div>
 
               {/* Dynamic Content Area */}
@@ -1318,11 +1475,11 @@ export default function App() {
                   className="bg-white/95 backdrop-blur-md rounded-[2.5rem] shadow-2xl p-8 border border-white/20 min-h-[400px]"
                 >
                   {activeAdminTab === 'dashboard' ? (
-                    <AdminDashboard registrations={userRegistrations} />
+                    <AdminDashboard registrations={userRegistrations} userRole={userRole} />
                   ) : (
                     <RegistrationsTable 
                       registrations={userRegistrations} 
-                      isAdmin={true} 
+                      userRole={userRole} 
                       onEdit={setEditingRegistration}
                       onDelete={handleDeleteRegistration}
                     />
@@ -1335,7 +1492,6 @@ export default function App() {
                 <button 
                   onClick={() => {
                     setViewRole('landing');
-                    setIsAdminGatePassed(false);
                   }}
                   className="px-8 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-2xl text-xs font-bold hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 group"
                 >
@@ -1412,7 +1568,10 @@ export default function App() {
                         </motion.div>
                       ) : (
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                          <RegistrationForm selectedSchool={selectedSchool?.name || ''} onSuccess={() => setIsSuccess(true)} />
+                          <RegistrationForm 
+                            selectedSchools={schoolsWithInfo.slice(0, 3).map(s => s.name)} 
+                            onSuccess={() => setIsSuccess(true)} 
+                          />
                         </motion.div>
                       )}
                     </AnimatePresence>
