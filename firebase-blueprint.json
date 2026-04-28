@@ -14,6 +14,8 @@
         "choice1": { "type": "string", "description": "First choice school (nearest)" },
         "choice2": { "type": "string", "description": "Second choice school" },
         "choice3": { "type": "string", "description": "Third choice school" },
+        "isAccepted": { "type": "boolean", "description": "Whether the registration has been accepted by an admin" },
+        "acceptedSchool": { "type": "string", "description": "The specific school the student was accepted into" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
       },
       "required": ["firstName", "lastName", "gradeLevel", "phone", "address", "chosenSchool", "choice1", "choice2", "choice3", "createdAt"]

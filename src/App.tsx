@@ -97,6 +97,8 @@ interface RegistrationData extends RegistrationFormInput {
   updatedAt?: any;
   deletedAt?: any;
   id: string;
+  isAccepted?: boolean;
+  acceptedSchool?: string;
 }
 
 interface RegistrationFormInput {
@@ -135,11 +137,12 @@ const CameraHandler = ({ center, zoom }: { center: google.maps.LatLngLiteral | n
   return null;
 };
 
-const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral; destination: google.maps.LatLngLiteral }) => {
+const Directions = ({ origin, destination, onDenied, isDenied }: { origin: google.maps.LatLngLiteral; destination: google.maps.LatLngLiteral; onDenied?: () => void; isDenied?: boolean }) => {
   const map = useMap();
   const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null);
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [localDenied, setLocalDenied] = useState(false);
 
   const [polyline, setPolyline] = useState<google.maps.Polyline | null>(null);
 
@@ -167,7 +170,7 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
       });
       setPolyline(line);
     } catch (e) {
-      console.error("Failed to initialize Directions Service:", e);
+      console.warn("Directions Service initialization skipped or failed.");
     }
     return () => {
       if (directionsRenderer) directionsRenderer.setMap(null);
@@ -176,7 +179,16 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
   }, [map]);
 
   useEffect(() => {
-    if (!directionsService || !directionsRenderer || !polyline) return;
+    if (!directionsRenderer || !polyline) return;
+
+    if (isDenied || localDenied) {
+      directionsRenderer.setDirections({ routes: [] } as any);
+      polyline.setPath([origin, destination]);
+      polyline.setVisible(true);
+      return;
+    }
+
+    if (!directionsService) return;
 
     directionsService.route(
       {
@@ -195,14 +207,17 @@ const Directions = ({ origin, destination }: { origin: google.maps.LatLngLiteral
           polyline.setPath([origin, destination]);
           polyline.setVisible(true);
 
-          if (status !== 'REQUEST_DENIED') {
+          if (status === 'REQUEST_DENIED') {
+            setLocalDenied(true);
+            onDenied?.();
+          } else {
             console.warn("Directions Request Failed:", status);
           }
           setError(status);
         }
       }
     );
-  }, [directionsService, directionsRenderer, polyline, origin, destination]);
+  }, [directionsService, directionsRenderer, polyline, origin, destination, isDenied, localDenied, onDenied]);
 
   return null;
 };
@@ -277,11 +292,15 @@ const SchoolCard = ({
   );
 };
 
-const AdminDashboard = ({ registrations, userRole }: { registrations: RegistrationData[], userRole: 'admin' | 'staff' | 'landing' }) => {
+const AdminDashboard = ({ registrations, userRole, staffSchool, globalStats }: { registrations: RegistrationData[], userRole: 'admin' | 'staff' | 'landing', staffSchool: string | null, globalStats: Record<string, number> }) => {
   const schoolCount = SCHOOLS.map(school => ({
     name: school.name,
-    count: registrations.filter(r => r.chosenSchool === school.name).length
-  }));
+    count: globalStats[school.name] || 0
+  })).filter(s => userRole === 'admin' || s.name === staffSchool);
+
+  const totalGlobal = userRole === 'staff' && staffSchool 
+    ? (globalStats[staffSchool] || 0)
+    : Object.values(globalStats).reduce((a, b) => a + b, 0);
 
   const gradeCount = [
     { name: 'الأولى', count: registrations.filter(r => r.gradeLevel === 'السنة الأولى إعدادي').length },
@@ -295,7 +314,7 @@ const AdminDashboard = ({ registrations, userRole }: { registrations: Registrati
     <div className="space-y-8 py-6">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl font-black text-slate-800">
-          {userRole === 'admin' ? 'لوحة تحكم المسؤول' : 'لوحة تحكم المساعد (Staff)'}
+          {userRole === 'admin' ? 'لوحة تحكم المسؤول' : (staffSchool ? `فضاء: ${staffSchool}` : 'لوحة تحكم المساعد')}
         </h2>
         <div className="flex items-center gap-3">
           {userRole === 'admin' && !auth.currentUser && (
@@ -344,8 +363,12 @@ const AdminDashboard = ({ registrations, userRole }: { registrations: Registrati
               <Building2 className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-400">توزيع المؤسسات</p>
-              <p className="text-2xl font-black text-slate-800">{SCHOOLS.length}</p>
+              <p className="text-sm font-bold text-slate-400">
+                {userRole === 'staff' ? 'المؤسسة الحالية' : 'توزيع المؤسسات'}
+              </p>
+              <p className="text-2xl font-black text-slate-800">
+                {userRole === 'staff' ? '1' : SCHOOLS.length}
+              </p>
             </div>
           </div>
           <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden">
@@ -391,7 +414,7 @@ const AdminDashboard = ({ registrations, userRole }: { registrations: Registrati
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
                 <RechartsTooltip 
                   contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                  formatter={(value: any) => [`${value} تلميذ (${((Number(value) / (registrations.length || 1)) * 100).toFixed(1)}%)`, 'العدد']}
+                  formatter={(value: any) => [`${value} تلميذ (${((Number(value) / (totalGlobal || 1)) * 100).toFixed(1)}%)`, 'العدد']}
                 />
                 <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={32}>
                   <LabelList 
@@ -489,17 +512,32 @@ const AdminDashboard = ({ registrations, userRole }: { registrations: Registrati
 const RegistrationsTable = ({ 
   registrations, 
   userRole, 
+  staffSchool,
   onEdit, 
   onDelete 
 }: { 
   registrations: RegistrationData[], 
   userRole: 'admin' | 'staff' | 'landing',
+  staffSchool: string | null,
   onEdit: (reg: RegistrationData) => void,
   onDelete: (id: string) => void
 }) => {
   if (userRole === 'landing' || registrations.length === 0) return null;
 
   const canEditDelete = userRole === 'admin';
+
+  const handleAccept = async (reg: RegistrationData, school: string) => {
+    try {
+      const docRef = doc(db, 'registrations', reg.id);
+      await updateDoc(docRef, {
+        isAccepted: true,
+        acceptedSchool: school,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error accepting registration:", error);
+    }
+  };
 
   const handleWhatsApp = (reg: RegistrationData, selectedSchool: string) => {
     const message = `السلام عليكم ورحمة الله،\n\nنخبركم أنه تم قبول ملف التلميذ(ة) ${reg.firstName} ${reg.lastName} للتسجيل في ${selectedSchool} للموسم الدراسي المقبل.\n\nالمرجو الالتحاق بالمؤسسة لاستكمال إجراءات التسجيل.\n\nمع التحية.`;
@@ -516,7 +554,25 @@ const RegistrationsTable = ({
 
   const WhatsAppMenu = ({ reg }: { reg: RegistrationData }) => {
     const [isOpen, setIsOpen] = useState(false);
+    
+    // For staff, they only see accepted registrations for their school, so the target school is clear
+    const displaySchool = userRole === 'staff' ? (staffSchool || reg.acceptedSchool || reg.chosenSchool) : (reg.acceptedSchool || reg.chosenSchool);
+
+    if (userRole === 'staff') {
+      return (
+        <button 
+          onClick={() => handleWhatsApp(reg, displaySchool)}
+          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1"
+          title="مراسلة واتساب"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span className="text-[10px] font-bold">مراسلة</span>
+        </button>
+      );
+    }
+
     const choices = [reg.choice1, reg.choice2, reg.choice3].filter(Boolean);
+    const currentSchool = reg.acceptedSchool || reg.chosenSchool;
 
     return (
       <div className="relative">
@@ -533,8 +589,17 @@ const RegistrationsTable = ({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             <div className="absolute left-0 bottom-full mb-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-              <div className="px-3 py-1.5 text-[9px] uppercase font-bold text-gray-400 bg-gray-50/50">اختر المؤسسة:</div>
-              {choices.map((choice, idx) => (
+              <div className="px-3 py-1.5 text-[9px] uppercase font-bold text-gray-400 bg-gray-50/50">اختر المؤسسة للمراسلة:</div>
+              <button
+                onClick={() => {
+                  handleWhatsApp(reg, currentSchool);
+                  setIsOpen(false);
+                }}
+                className="w-full text-right px-4 py-2 text-xs hover:bg-green-50 text-green-700 font-bold transition-colors block border-b border-gray-50"
+              >
+                {currentSchool} {reg.isAccepted ? '(المقبولة)' : '(المختارة)'}
+              </button>
+              {choices.filter(c => c !== currentSchool).map((choice, idx) => (
                 <button
                   key={idx}
                   onClick={() => {
@@ -576,8 +641,7 @@ const RegistrationsTable = ({
               <th className="px-6 py-4">التلميذ</th>
               <th className="px-6 py-4">المستوى</th>
               <th className="px-6 py-4">الهاتف</th>
-              <th className="px-6 py-4">المؤسسة المختارة</th>
-              <th className="px-6 py-4 text-xs">خيارات إضافية</th>
+              <th className="px-6 py-4">{userRole === 'admin' ? 'الاختيارات والقبول' : 'المؤسسة المقبولة'}</th>
               <th className="px-6 py-4">الحالة</th>
               <th className="px-6 py-4">الإجراءات</th>
             </tr>
@@ -592,21 +656,50 @@ const RegistrationsTable = ({
                 <td className="px-6 py-4 text-gray-600">{reg.gradeLevel}</td>
                 <td className="px-6 py-4 text-gray-600 font-mono" dir="ltr">{reg.phone}</td>
                 <td className="px-6 py-4">
-                  <span className="flex items-center gap-1.5 font-medium text-blue-600">
-                    <Building2 className="w-3.5 h-3.5" />
-                    {reg.chosenSchool}
-                  </span>
+                  {userRole === 'admin' ? (
+                    <div className="flex flex-col gap-1.5 min-w-[200px]">
+                      {[reg.choice1, reg.choice2, reg.choice3].filter(Boolean).map((choice, idx) => {
+                        const isThisAccepted = reg.isAccepted && reg.acceptedSchool === choice;
+                        return (
+                          <div key={idx} className={`flex items-center justify-between p-1.5 rounded-lg border ${isThisAccepted ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+                            <span className={`text-[10px] font-bold ${isThisAccepted ? 'text-green-700' : 'text-gray-500'}`}>
+                              {idx + 1}. {choice}
+                            </span>
+                            {!isThisAccepted && (
+                              <button
+                                onClick={() => handleAccept(reg, choice as string)}
+                                className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-md hover:bg-blue-700 transition-colors"
+                              >
+                                قبول
+                              </button>
+                            )}
+                            {isThisAccepted && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="flex items-center gap-1.5 font-bold text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                      <Building2 className="w-3.5 h-3.5" />
+                      {reg.acceptedSchool}
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded italic">{reg.choice2}</span>
-                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded italic">{reg.choice3}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold border border-green-100">
-                    <CheckCircle2 className="w-3 h-3" />
-                    مقبول
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${reg.isAccepted ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                    {reg.isAccepted ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3" />
+                        تم القبول
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="w-3 h-3" />
+                        في الانتظار
+                      </>
+                    )}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -1049,19 +1142,12 @@ export default function App() {
   const [activeAdminTab, setActiveAdminTab] = useState<'registrations' | 'dashboard'>('dashboard');
   const [adminLocalRole, setAdminLocalRole] = useState(false);
   const [staffRole, setStaffRole] = useState(false);
+  const [staffSchool, setStaffSchool] = useState<string | null>(null);
   const [adminGateData, setAdminGateData] = useState({ username: '', password: '' });
   const [adminGateError, setAdminGateError] = useState('');
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   
-  const userRole = useMemo(() => {
-    if (adminLocalRole) return 'admin';
-    if (staffRole) return 'staff';
-    if (user && ADMIN_EMAILS.includes(user.email || '')) return 'admin';
-    return 'landing';
-  }, [user, staffRole, adminLocalRole]);
-
-  const hasAdminAccess = userRole === 'admin' || userRole === 'staff';
   const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [selectedSchool, setSelectedSchool] = useState<SchoolData | null>(null);
   const [schoolsWithInfo, setSchoolsWithInfo] = useState<(SchoolData & { distance?: string; duration?: string; distanceValue?: number })[]>([]);
@@ -1075,6 +1161,33 @@ export default function App() {
   const [isManualPicking, setIsManualPicking] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<RegistrationData | null>(null);
   const [distanceServiceDenied, setDistanceServiceDenied] = useState(false);
+  const [directionsServiceDenied, setDirectionsServiceDenied] = useState(false);
+
+  const userRole = useMemo(() => {
+    if (adminLocalRole) return 'admin';
+    if (staffRole) return 'staff';
+    if (user && ADMIN_EMAILS.includes(user.email || '')) return 'admin';
+    return 'landing';
+  }, [user, staffRole, adminLocalRole]);
+
+  const filteredRegistrations = useMemo(() => {
+    if (userRole === 'admin') return userRegistrations;
+    if (userRole === 'staff' && staffSchool) {
+      // Only show accepted registrations for staff, filtered by their school
+      return userRegistrations.filter(r => r.isAccepted && r.acceptedSchool === staffSchool);
+    }
+    return userRegistrations;
+  }, [userRegistrations, userRole, staffSchool]);
+
+  const filteredStats = useMemo(() => {
+    if (userRole === 'admin') return globalStats;
+    if (userRole === 'staff' && staffSchool) {
+      return { [staffSchool]: globalStats[staffSchool] || 0 };
+    }
+    return globalStats;
+  }, [globalStats, userRole, staffSchool]);
+
+  const hasAdminAccess = userRole === 'admin' || userRole === 'staff';
 
   const handleDeleteRegistration = async (id: string) => {
     try {
@@ -1141,8 +1254,9 @@ export default function App() {
       unsubscribeStats = onSnapshot(qAll, (snapshot) => {
         const stats: Record<string, number> = {};
         snapshot.docs.forEach(d => {
-          const data = d.data();
-          const school = data.chosenSchool;
+          const data = d.data() as RegistrationData;
+          if (data.deletedAt) return;
+          const school = data.acceptedSchool || data.chosenSchool;
           if (school) {
             stats[school] = (stats[school] || 0) + 1;
           }
@@ -1324,16 +1438,25 @@ export default function App() {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
+              const schoolMatch = SCHOOLS.find(s => s.name === adminGateData.username);
+              
               if (adminGateData.username === ADMIN_USER && adminGateData.password === ADMIN_PASS) {
                 setAdminLocalRole(true);
                 setStaffRole(false);
+                setStaffSchool(null);
+                setViewRole('admin_dashboard');
+              } else if (schoolMatch && adminGateData.password === STAFF_PASS) {
+                setStaffRole(true);
+                setAdminLocalRole(false);
+                setStaffSchool(schoolMatch.name);
                 setViewRole('admin_dashboard');
               } else if (adminGateData.username === STAFF_USER && adminGateData.password === STAFF_PASS) {
                 setStaffRole(true);
                 setAdminLocalRole(false);
+                setStaffSchool(null);
                 setViewRole('admin_dashboard');
               } else {
-                setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة');
+                setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة. للدخول كمساعد استعمل اسم المؤسسة كاسم مستخدم.');
               }
             }}
             className="space-y-5"
@@ -1521,11 +1644,17 @@ export default function App() {
                   className="bg-white/95 backdrop-blur-md rounded-[2.5rem] shadow-2xl p-8 border border-white/20 min-h-[400px]"
                 >
                   {activeAdminTab === 'dashboard' ? (
-                    <AdminDashboard registrations={userRegistrations} userRole={userRole} />
+                    <AdminDashboard 
+                      registrations={filteredRegistrations} 
+                      userRole={userRole} 
+                      staffSchool={staffSchool} 
+                      globalStats={globalStats}
+                    />
                   ) : (
                     <RegistrationsTable 
-                      registrations={userRegistrations} 
+                      registrations={filteredRegistrations} 
                       userRole={userRole} 
+                      staffSchool={staffSchool}
                       onEdit={setEditingRegistration}
                       onDelete={handleDeleteRegistration}
                     />
@@ -1596,7 +1725,14 @@ export default function App() {
                 <div className="map-container h-[400px]">
                   <Map defaultCenter={MHAMID_CENTER} defaultZoom={15} mapId="MAIN_MAP" onClick={e => { if (e.detail.latLng) setUserLocation(e.detail.latLng); setIsManualPicking(false); }}>
                     {selectedSchool ? <CameraHandler center={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} zoom={16} /> : userLocation ? <CameraHandler center={userLocation} /> : null}
-                    {userLocation && selectedSchool && <Directions origin={userLocation} destination={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} />}
+                    {userLocation && selectedSchool && (
+                      <Directions 
+                        origin={userLocation} 
+                        destination={{ lat: selectedSchool.lat, lng: selectedSchool.lng }} 
+                        onDenied={() => setDirectionsServiceDenied(true)}
+                        isDenied={directionsServiceDenied}
+                      />
+                    )}
                     {userLocation && <Marker position={userLocation} title="موقعك" icon={{ url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }} />}
                     {SCHOOLS.map(s => <Marker key={s.id} position={{lat: s.lat, lng: s.lng}} title={s.name} onClick={() => setSelectedSchool(s)} />)}
                   </Map>
@@ -1628,6 +1764,12 @@ export default function App() {
                     <section className="bg-white p-6 rounded-3xl shadow-xl border border-blue-50 max-h-[600px] overflow-hidden flex flex-col">
                       <h2 className="text-lg font-bold mb-4 text-slate-800">الإعداديات المتاحة</h2>
                       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
+                        {(distanceServiceDenied || directionsServiceDenied) && (
+                          <div className="bg-amber-50 border border-amber-100 p-2 rounded-xl flex items-center gap-2 mb-3 text-amber-700 text-[9px] font-bold">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            <span>محسوب تقريبياً لعدم توفر خرائط الطرق</span>
+                          </div>
+                        )}
                         {((schoolsWithInfo.length > 0 ? schoolsWithInfo : SCHOOLS) as any[]).map((school) => (
                           <SchoolCard key={school.id} school={school} isActive={selectedSchool?.id === school.id} distance={school.distance} duration={school.duration} onClick={() => setSelectedSchool(school)} />
                         ))}

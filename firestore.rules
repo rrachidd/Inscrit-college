@@ -30,6 +30,8 @@ service cloud.firestore {
       let choice1 = data.get('choice1', '');
       let choice2 = data.get('choice2', '');
       let choice3 = data.get('choice3', '');
+      let isAccepted = data.get('isAccepted', false);
+      let acceptedSchool = data.get('acceptedSchool', '');
 
       return firstName is string && firstName.size() <= 100
         && lastName is string && lastName.size() <= 100
@@ -39,7 +41,9 @@ service cloud.firestore {
         && chosenSchool is string && chosenSchool.size() <= 100
         && choice1 is string && choice1.size() <= 100
         && choice2 is string && choice2.size() <= 100
-        && choice3 is string && choice3.size() <= 100;
+        && choice3 is string && choice3.size() <= 100
+        && isAccepted is bool
+        && acceptedSchool is string && acceptedSchool.size() <= 100;
     }
 
     function isAdmin() {
@@ -67,7 +71,7 @@ service cloud.firestore {
                       isValidRegistration(incoming()) &&
                       incoming().updatedAt == request.time &&
                       incoming().createdAt == existing().createdAt &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'choice1', 'choice2', 'choice3', 'updatedAt', 'deletedAt']);
+                      incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'choice1', 'choice2', 'choice3', 'updatedAt', 'deletedAt', 'isAccepted', 'acceptedSchool']);
       
       allow delete: if (isAdmin() || isAdminEmail()) && isValidId(registrationId);
     }
