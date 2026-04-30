@@ -37,7 +37,9 @@ import {
   Activity,
   TrendingUp,
   LayoutDashboard,
-  ChevronDown
+  ChevronDown,
+  Printer,
+  Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -142,14 +144,16 @@ const Directions = ({ origin, destination, onDenied, isDenied }: { origin: googl
   const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null);
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [localDenied, setLocalDenied] = useState(false);
+  const [localDenied, setLocalDenied] = useState(() => localStorage.getItem('google_maps_directions_denied') === 'true');
 
   const [polyline, setPolyline] = useState<google.maps.Polyline | null>(null);
 
   useEffect(() => {
     if (!map) return;
     try {
-      setDirectionsService(new google.maps.DirectionsService());
+      if (!isDenied && !localDenied) {
+        setDirectionsService(new google.maps.DirectionsService());
+      }
       const renderer = new google.maps.DirectionsRenderer({ 
         map,
         suppressMarkers: true,
@@ -208,6 +212,7 @@ const Directions = ({ origin, destination, onDenied, isDenied }: { origin: googl
           polyline.setVisible(true);
 
           if (status === 'REQUEST_DENIED') {
+            localStorage.setItem('google_maps_directions_denied', 'true');
             setLocalDenied(true);
             onDenied?.();
           } else {
@@ -514,17 +519,118 @@ const RegistrationsTable = ({
   userRole, 
   staffSchool,
   onEdit, 
-  onDelete 
+  onDelete,
+  filterSchool,
+  setFilterSchool,
+  filterGrade,
+  setFilterGrade,
+  filterStatus,
+  setFilterStatus
 }: { 
   registrations: RegistrationData[], 
   userRole: 'admin' | 'staff' | 'landing',
   staffSchool: string | null,
   onEdit: (reg: RegistrationData) => void,
-  onDelete: (id: string) => void
+  onDelete: (id: string) => void,
+  filterSchool: string,
+  setFilterSchool: (s: string) => void,
+  filterGrade: string,
+  setFilterGrade: (g: string) => void,
+  filterStatus: string,
+  setFilterStatus: (s: any) => void
 }) => {
-  if (userRole === 'landing' || registrations.length === 0) return null;
+  if (userRole === 'landing') return null;
 
   const canEditDelete = userRole === 'admin';
+
+  const handlePrint = () => {
+    const currentSchool = userRole === 'staff' ? staffSchool : (filterSchool !== 'all' ? filterSchool : 'جميع المؤسسات');
+    const currentGrade = filterGrade !== 'all' ? filterGrade : 'جميع المستويات';
+
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (!printWindow) {
+      alert('المرجو السماح بالنوافذ المنبثقة (Pop-ups) لتتمكن من الطباعة');
+      return;
+    }
+
+    const html = `
+      <html dir="rtl">
+        <head>
+          <title>لائحة التلاميذ - ${currentSchool}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+            body { font-family: 'Tajawal', sans-serif; padding: 30px; color: #333; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #3b82f6; padding-bottom: 20px; }
+            .header h1 { margin: 0; color: #1e40af; font-size: 26px; }
+            .header h2 { margin: 10px 0; color: #2563eb; font-size: 20px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background-color: #f1f5f9; color: #1e293b; font-weight: bold; border: 2px solid #cbd5e1; padding: 12px; text-align: right; }
+            td { border: 1px solid #cbd5e1; padding: 10px; text-align: right; font-size: 13px; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 40px; text-align: left; font-size: 12px; color: #64748b; font-style: italic; }
+            @media print {
+              .no-print { display: none; }
+              body { padding: 0; }
+              @page { margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>المملكة المغربية - لائحة التلاميذ</h1>
+            <h2>المؤسسة: ${currentSchool}</h2>
+            <p style="margin:5px 0;">السنة الدراسية: 2024 / 2025</p>
+          </div>
+          <div class="meta">
+            <span>المستوى: ${currentGrade}</span>
+            <span>عدد التلاميذ: ${registrations.length}</span>
+            <span>تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-MA')}</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px;">رقم</th>
+                <th>الاسم العائلي</th>
+                <th>الاسم الشخصي</th>
+                <th>المستوى</th>
+                <th>رقم الهاتف</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${registrations.map((reg, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td>${reg.lastName}</td>
+                  <td>${reg.firstName}</td>
+                  <td>${reg.gradeLevel}</td>
+                  <td dir="ltr">${reg.phone}</td>
+                  <td>${reg.isAccepted ? 'مقبول' : 'في الإنتظار'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">
+            تم استخراج هذه اللائحة من منظومة التسجيل الإلكتروني - محاميد
+          </div>
+          <script>
+            window.onload = () => {
+              setTimeout(() => {
+                window.print();
+                // Optionally close after print dialog
+                // window.close(); 
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   const handleAccept = async (reg: RegistrationData, school: string) => {
     try {
@@ -620,19 +726,73 @@ const RegistrationsTable = ({
 
   return (
     <div className="mt-12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+      <div className="p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-green-600" />
             {userRole === 'admin' ? 'تتبع جميع التسجيلات (للمسؤول)' : 'لائحة التسجيلات (للمساعد)'}
           </h2>
           <p className="text-[10px] text-gray-400 font-medium mr-7">
-            {userRole === 'admin' ? 'لديك صلاحيات كاملة للتعديل والحذف' : 'وضع المساعد: يمكنك المراسلة عبر واتساب فقط'}
+            {userRole === 'admin' ? 'لديك صلاحيات كاملة للتعديل والحذف والفلطرة' : 'وضع المساعد: يمكنك المراسلة والطباعة'}
           </p>
         </div>
-        <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
-          {registrations.length} تسجيل إجمالي
-        </span>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          {userRole === 'admin' && (
+            <>
+              <div className="relative">
+                <Building2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <select 
+                  value={filterSchool}
+                  onChange={(e) => setFilterSchool(e.target.value)}
+                  className="pr-9 pl-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-100 appearance-none min-w-[140px]"
+                >
+                  <option value="all">جميع المؤسسات</option>
+                  {SCHOOLS.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="relative">
+                <GraduationCap className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <select 
+                  value={filterGrade}
+                  onChange={(e) => setFilterGrade(e.target.value)}
+                  className="pr-9 pl-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-100 appearance-none min-w-[120px]"
+                >
+                  <option value="all">جميع المستويات</option>
+                  <option value="السنة الأولى إعدادي">الأولى إعدادي</option>
+                  <option value="السنة الثانية إعدادي">الثانية إعدادي</option>
+                  <option value="السنة الثالثة إعدادي">الثالثة إعدادي</option>
+                </select>
+              </div>
+
+              <div className="relative">
+                <Activity className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <select 
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="pr-9 pl-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-100 appearance-none min-w-[120px]"
+                >
+                  <option value="all">جميع الحالات</option>
+                  <option value="accepted">تم القبول</option>
+                  <option value="pending">في انتظار</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-xl text-[11px] font-bold hover:bg-blue-700 transition-all shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            طباعة اللائحة
+          </button>
+
+          <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+            {registrations.length} تسجيل
+          </span>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-right text-sm">
@@ -1137,6 +1297,112 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+const ManualModal = ({ onClose }: { onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex justify-center items-center p-4 overflow-y-auto" dir="rtl">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden my-auto"
+      >
+        <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white">
+          <div className="flex items-center gap-3">
+            <Info className="w-6 h-6" />
+            <h2 className="text-2xl font-black">دليل الاستخدام وملاحظات هامة</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+        
+        <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+          {/* User Section */}
+          <section className="space-y-4">
+            <h3 className="text-lg font-black text-blue-600 flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              أولاً: دليل التلميذ/ولي الأمر
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-xs font-black text-slate-400 block mb-1">الخطوة 1</span>
+                <p className="text-sm font-bold text-slate-700">تحديد الموقع: ابحث عن عنوان سكنك أو استعمل خاصية تحديد الموقع التلقائي.</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-xs font-black text-slate-400 block mb-1">الخطوة 2</span>
+                <p className="text-sm font-bold text-slate-700">اختيار المؤسسة: ستظهر لك أقرب الإعداديات مع حساب المسافة والزمن اللازم مشياً.</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-xs font-black text-slate-400 block mb-1">الخطوة 3</span>
+                <p className="text-sm font-bold text-slate-700">التسجيل: املأ الاستمارة بعناية، مع اختيار 3 رغبات للمؤسسات المفضلة.</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-xs font-black text-slate-400 block mb-1">الخطوة 4</span>
+                <p className="text-sm font-bold text-slate-700">المتابعة: سيتم التواصل معكم عبر الواتساب فور معالجة طلبكم من طرف الإدارة.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Personnel Section */}
+          <section className="space-y-4 pt-4 border-t border-slate-100">
+            <h3 className="text-lg font-black text-orange-600 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" />
+              ثانياً: فضاء المسؤول والمساعد
+            </h3>
+            <div className="space-y-3">
+              <div className="flex gap-4 p-4 bg-orange-50 rounded-3xl border border-orange-100">
+                <div className="p-2 bg-orange-100 rounded-xl h-fit">
+                  <LayoutDashboard className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-sm">لوحة التحكم (Dashboard)</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">تتيح للمسؤول رؤية إحصائيات عامة حول عدد التسجيلات في كل مؤسسة وتوزيع المستويات الدراسية.</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4 p-4 bg-blue-50 rounded-3xl border border-blue-100">
+                <div className="p-2 bg-blue-100 rounded-xl h-fit">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-sm">تدبير التسجيلات</h4>
+                  <ul className="text-xs text-slate-500 leading-relaxed mt-2 list-disc list-inside space-y-1">
+                    <li><span className="font-bold text-slate-700">الفلترة:</span> يمكن فرز التلاميذ حسب المؤسسة، المستوى الدراسي، أو حالة الطلب (مقبول/في الانتظار).</li>
+                    <li><span className="font-bold text-slate-700">القبول:</span> يتم قبول الطلب بتحديد المؤسسة النهائية وإرسال إشعار للمستفيد.</li>
+                    <li><span className="font-bold text-slate-700">التواصل:</span> زر الواتساب يتيح مراسلة ولي الأمر برسالة جاهزة تتضمن معلومات القبول.</li>
+                    <li><span className="font-bold text-slate-700">الطباعة:</span> يمكن استخراج لوائح التلاميذ للمؤسسة المختارة بسهولة.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Critical Notes */}
+          <section className="p-6 bg-red-50 rounded-[2rem] border border-red-100 space-y-3">
+            <div className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              <h3 className="font-black">ملاحظات تقنية هامة</h3>
+            </div>
+            <ul className="text-xs text-red-700 space-y-2 font-bold">
+              <li className="flex gap-2"><span>•</span> <span>يجب توفر اتصال جيد بالإنترنت لضمان مزامنة البيانات والخرائط.</span></li>
+              <li className="flex gap-2"><span>•</span> <span>للحصول على صلاحيات المسؤول الكاملة، يجب تسجيل الدخول بحساب Google المعتمد.</span></li>
+              <li className="flex gap-2"><span>•</span> <span>تأكد من السماح بالنوافذ المنبثقة (Pop-ups) في المتصفح لاستخدام ميزة الطباعة.</span></li>
+            </ul>
+          </section>
+        </div>
+
+        <div className="p-8 bg-slate-50 flex justify-center">
+          <button 
+            onClick={onClose}
+            className="px-12 py-3 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl"
+          >
+            فهمت، إغلاق الدليل
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 export default function App() {
   const [viewRole, setViewRole] = useState<'landing' | 'admin_dashboard' | 'user' | 'admin_gate'>(() => 'landing');
   const [activeAdminTab, setActiveAdminTab] = useState<'registrations' | 'dashboard'>('dashboard');
@@ -1160,8 +1426,13 @@ export default function App() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [isManualPicking, setIsManualPicking] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<RegistrationData | null>(null);
-  const [distanceServiceDenied, setDistanceServiceDenied] = useState(false);
-  const [directionsServiceDenied, setDirectionsServiceDenied] = useState(false);
+  const [distanceServiceDenied, setDistanceServiceDenied] = useState(() => localStorage.getItem('google_maps_distance_denied') === 'true');
+  const [directionsServiceDenied, setDirectionsServiceDenied] = useState(() => localStorage.getItem('google_maps_directions_denied') === 'true');
+  const [filterSchool, setFilterSchool] = useState<string>('all');
+  const [filterGrade, setFilterGrade] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'accepted' | 'pending'>('all');
+
+  const [showManual, setShowManual] = useState(false);
 
   const userRole = useMemo(() => {
     if (adminLocalRole) return 'admin';
@@ -1171,13 +1442,37 @@ export default function App() {
   }, [user, staffRole, adminLocalRole]);
 
   const filteredRegistrations = useMemo(() => {
-    if (userRole === 'admin') return userRegistrations;
+    let list = userRegistrations;
+    
     if (userRole === 'staff' && staffSchool) {
-      // Only show accepted registrations for staff, filtered by their school
-      return userRegistrations.filter(r => r.isAccepted && r.acceptedSchool === staffSchool);
+      list = list.filter(r => r.isAccepted && r.acceptedSchool === staffSchool);
     }
-    return userRegistrations;
-  }, [userRegistrations, userRole, staffSchool]);
+
+    if (filterSchool !== 'all') {
+      list = list.filter(r => (r.acceptedSchool || r.chosenSchool) === filterSchool);
+    }
+
+    if (filterGrade !== 'all') {
+      list = list.filter(r => r.gradeLevel === filterGrade);
+    }
+
+    if (filterStatus === 'accepted') {
+      list = list.filter(r => r.isAccepted);
+    } else if (filterStatus === 'pending') {
+      list = list.filter(r => !r.isAccepted);
+    }
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(r => 
+        r.firstName.toLowerCase().includes(q) || 
+        r.lastName.toLowerCase().includes(q) || 
+        r.phone.includes(q)
+      );
+    }
+
+    return list;
+  }, [userRegistrations, userRole, staffSchool, filterSchool, filterGrade, filterStatus, searchQuery]);
 
   const filteredStats = useMemo(() => {
     if (userRole === 'admin') return globalStats;
@@ -1349,6 +1644,7 @@ export default function App() {
           setSelectedSchool(sorted[0]);
         } else {
           if (status === 'REQUEST_DENIED') {
+            localStorage.setItem('google_maps_distance_denied', 'true');
             setDistanceServiceDenied(true);
           } else {
             console.warn('Distance Matrix failed:', status);
@@ -1406,7 +1702,17 @@ export default function App() {
             </button>
           </div>
 
-          <div className="text-center mt-10">
+          <div className="text-center mt-6">
+            <button 
+              onClick={() => setShowManual(true)}
+              className="text-blue-200/50 hover:text-white transition-colors text-xs font-bold flex items-center justify-center gap-2 mx-auto"
+            >
+              <Info className="w-4 h-4" />
+              دليل الاستخدام والملاحظات
+            </button>
+          </div>
+
+          <div className="text-center mt-6">
             <p className="text-white/20 text-[10px] font-black uppercase tracking-widest">المحاميد - مراكش</p>
           </div>
         </motion.div>
@@ -1561,6 +1867,13 @@ export default function App() {
                       <Home className="w-2.5 h-2.5" />
                       العودة للرئيسية
                     </button>
+                    <button 
+                      onClick={() => setShowManual(true)}
+                      className="text-blue-300/60 text-[9px] font-bold hover:text-blue-200 transition-colors flex items-center gap-1 mt-1"
+                    >
+                      <Info className="w-2.5 h-2.5" />
+                      فتح دليل الاستخدام
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1577,16 +1890,13 @@ export default function App() {
             </h1>
             <p className="text-blue-100/60 text-sm font-medium -mt-4">نظام التوجيه المدرسي بمنطقة المحاميد مراكش</p>
 
-            {userRole === 'admin' && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="orange-banner w-full max-w-2xl px-8 py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-sm"
-              >
-                <Info className="w-5 h-5 shrink-0" />
-                <span>دليل الاستخدام وملاحظات</span>
-              </motion.div>
-            )}
+            <button 
+              onClick={() => setShowManual(true)}
+              className="orange-banner w-full max-w-2xl px-8 py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg"
+            >
+              <Info className="w-5 h-5 shrink-0" />
+              <span>دليل الاستخدام وملاحظات</span>
+            </button>
 
             <button 
               onClick={() => {
@@ -1657,6 +1967,12 @@ export default function App() {
                       staffSchool={staffSchool}
                       onEdit={setEditingRegistration}
                       onDelete={handleDeleteRegistration}
+                      filterSchool={filterSchool}
+                      setFilterSchool={setFilterSchool}
+                      filterGrade={filterGrade}
+                      setFilterGrade={setFilterGrade}
+                      filterStatus={filterStatus}
+                      setFilterStatus={setFilterStatus}
                     />
                   )}
                 </motion.div>
@@ -1799,6 +2115,12 @@ export default function App() {
               onClose={() => setEditingRegistration(null)}
               onUpdate={handleUpdateRegistration}
             />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showManual && (
+            <ManualModal onClose={() => setShowManual(false)} />
           )}
         </AnimatePresence>
 
