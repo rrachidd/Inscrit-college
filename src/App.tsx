@@ -1431,6 +1431,7 @@ export default function App() {
   const [filterSchool, setFilterSchool] = useState<string>('all');
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'accepted' | 'pending'>('all');
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   const [showManual, setShowManual] = useState(false);
 
@@ -1444,8 +1445,11 @@ export default function App() {
   const filteredRegistrations = useMemo(() => {
     let list = userRegistrations;
     
+    // For staff, we only show registrations for their school
+    // but we can allow them to see pending ones that CHOSE their school as first choice?
+    // Actually, usually staff should only see accepted. But let's keep it flexible if they are searching.
     if (userRole === 'staff' && staffSchool) {
-      list = list.filter(r => r.isAccepted && r.acceptedSchool === staffSchool);
+      list = list.filter(r => (r.isAccepted && r.acceptedSchool === staffSchool) || (!r.isAccepted && r.chosenSchool === staffSchool));
     }
 
     if (filterSchool !== 'all') {
@@ -1538,10 +1542,16 @@ export default function App() {
             id: d.id,
             ...d.data()
           } as RegistrationData))
-          .filter(r => !r.deletedAt); // Client-side filter to avoid index issues for now
+          .filter(r => !r.deletedAt);
         setUserRegistrations(regs);
+        setFirestoreError(null);
       }, (error) => {
         console.error("Registrations snapshot error:", error);
+        if (error.code === 'unavailable') {
+          setFirestoreError("جاري الاتصال بقاعدة البيانات... المرجو التحقق من صبيب الإنترنت");
+        } else {
+          setFirestoreError(error.message);
+        }
       });
 
       // Calculate global stats for admin
@@ -1811,6 +1821,12 @@ export default function App() {
 
   return (
     <div className={`min-h-screen ${hasAdminAccess || viewRole === 'admin_gate' ? 'launcher-bg' : 'bg-slate-200'} text-gray-900 font-sans transition-colors duration-500`} dir="rtl">
+      {firestoreError && (
+        <div className="fixed top-0 inset-x-0 z-[200] bg-red-600 text-white text-[11px] font-black py-2 px-4 flex items-center justify-center gap-2 shadow-lg banner-animate">
+          <AlertCircle className="w-4 h-4" />
+          <span>{firestoreError}</span>
+        </div>
+      )}
       <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar">
         
         {/* Profile / Logout Widget (Floating) */}
