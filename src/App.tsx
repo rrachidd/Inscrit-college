@@ -39,7 +39,8 @@ import {
   LayoutDashboard,
   ChevronDown,
   Printer,
-  Filter
+  Filter,
+  Link as LinkIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -1404,7 +1405,31 @@ const ManualModal = ({ onClose }: { onClose: () => void }) => {
 };
 
 export default function App() {
-  const [viewRole, setViewRole] = useState<'landing' | 'admin_dashboard' | 'user' | 'admin_gate'>(() => 'landing');
+  const [isPortalIsolated] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('portal');
+  });
+
+  const [viewRole, setViewRole] = useState<'landing' | 'admin_dashboard' | 'user' | 'admin_gate'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const portal = params.get('portal');
+    if (portal === 'admin') return 'admin_gate';
+    if (portal === 'user') return 'user';
+    return 'landing';
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (viewRole === 'user') {
+      params.set('portal', 'user');
+    } else if (viewRole === 'admin_gate' || viewRole === 'admin_dashboard') {
+      params.set('portal', 'admin');
+    } else {
+      params.delete('portal');
+    }
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, '', newUrl);
+  }, [viewRole]);
   const [activeAdminTab, setActiveAdminTab] = useState<'registrations' | 'dashboard'>('dashboard');
   const [adminLocalRole, setAdminLocalRole] = useState(false);
   const [staffRole, setStaffRole] = useState(false);
@@ -1679,53 +1704,91 @@ export default function App() {
     }
   }, [userLocation, distanceServiceDenied]);
 
+  const copyLink = (portal: 'user' | 'admin') => {
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('portal', portal);
+    navigator.clipboard.writeText(url.toString());
+    alert(`تم نسخ رابط ${portal === 'user' ? 'فضاء التلميذ' : 'فضاء المسؤول'} بنجاح`);
+  };
+
   if (viewRole === 'landing') {
     return (
-      <div className="min-h-screen launcher-bg flex items-center justify-center p-6 text-right" dir="rtl">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-10 border border-white/10"
-        >
-          <div className="text-center mb-10">
-            <div className="w-24 h-24 bg-white/10 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/5">
-              <SchoolIcon className="w-12 h-12 text-blue-200" />
+      <div className="min-h-screen launcher-bg flex items-center justify-center p-6 text-right overflow-hidden" dir="rtl">
+        <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* User Portal */}
+          <motion.div 
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="group relative overflow-hidden bg-white/10 backdrop-blur-xl rounded-[3rem] shadow-2xl p-10 border border-white/10 flex flex-col items-center text-center hover:bg-white/20 transition-all cursor-pointer"
+            onClick={() => setViewRole('user')}
+          >
+            <div className="w-24 h-24 bg-white text-blue-600 rounded-3xl flex items-center justify-center mb-8 shadow-2xl group-hover:scale-110 transition-transform">
+              <GraduationCap className="w-12 h-12" />
             </div>
-            <h1 className="text-3xl font-black text-white mb-3">نظام إدارة التسجيلات</h1>
-            <p className="text-blue-100/60 text-sm font-medium">نظام التوجيه المدرسي بمنطقة المحاميد مراكش</p>
-          </div>
+            <h2 className="text-3xl font-black text-white mb-4">فضاء التلميذ</h2>
+            <p className="text-blue-100/60 text-sm font-medium mb-10 leading-relaxed">
+              تسجيل التلاميذ الجدد، متابعة حالة الطلب، وتحديد المؤسسة الأقرب لسكنكم عبر الخريطة التفاعلية.
+            </p>
+            <div className="w-full flex flex-col gap-3">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setViewRole('user'); }}
+                className="w-full py-5 bg-white text-blue-900 rounded-2xl font-black text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-50 transition-colors"
+              >
+                دخول المستخدم
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); copyLink('user'); }}
+                className="flex items-center justify-center gap-2 text-white/50 hover:text-white transition-colors text-xs font-bold"
+              >
+                <LinkIcon className="w-4 h-4" />
+                نسخ رابط مباشر لهذا الفضاء
+              </button>
+            </div>
+          </motion.div>
 
-          <div className="space-y-4">
-            <button 
-              onClick={() => setViewRole('user')}
-              className="w-full group relative overflow-hidden bg-white text-blue-900 p-6 rounded-3xl transition-all hover:scale-[1.02] active:scale-[0.98] font-black text-xl shadow-xl shadow-blue-900/40"
-            >
-              دخول المستخدم
-            </button>
+          {/* Admin Portal */}
+          <motion.div 
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="group relative overflow-hidden bg-slate-900/40 backdrop-blur-xl rounded-[3rem] shadow-2xl p-10 border border-white/10 flex flex-col items-center text-center hover:bg-slate-900/60 transition-all cursor-pointer"
+            onClick={() => setViewRole('admin_gate')}
+          >
+            <div className="w-24 h-24 bg-blue-600 text-white rounded-3xl flex items-center justify-center mb-8 shadow-2xl group-hover:scale-110 transition-transform">
+              <ShieldCheck className="w-12 h-12" />
+            </div>
+            <h2 className="text-3xl font-black text-white mb-4">فضاء المسؤول</h2>
+            <p className="text-blue-100/60 text-sm font-medium mb-10 leading-relaxed">
+              خاص بإدارة المؤسسات، تدبير تسجيلات التلاميذ، المصادقة على الطلبات، واستخراج اللوائح والإحصائيات.
+            </p>
+            <div className="w-full flex flex-col gap-3">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setViewRole('admin_gate'); }}
+                className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-xl hover:bg-blue-700 transition-colors"
+              >
+                دخول الإدارة
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); copyLink('admin'); }}
+                className="flex items-center justify-center gap-2 text-white/50 hover:text-white transition-colors text-xs font-bold"
+              >
+                <LinkIcon className="w-4 h-4" />
+                نسخ رابط مباشر للمسؤول
+              </button>
+            </div>
+          </motion.div>
+        </div>
 
-            <button 
-              onClick={() => setViewRole('admin_gate')}
-              className="w-full group relative overflow-hidden bg-blue-600 text-white p-6 rounded-3xl transition-all hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-3"
-            >
-              <ShieldCheck className="w-6 h-6" />
-              <span className="text-xl font-bold">فضاء المسؤول (Personnel Area)</span>
-            </button>
-          </div>
-
-          <div className="text-center mt-6">
-            <button 
-              onClick={() => setShowManual(true)}
-              className="text-blue-200/50 hover:text-white transition-colors text-xs font-bold flex items-center justify-center gap-2 mx-auto"
-            >
-              <Info className="w-4 h-4" />
-              دليل الاستخدام والملاحظات
-            </button>
-          </div>
-
-          <div className="text-center mt-6">
-            <p className="text-white/20 text-[10px] font-black uppercase tracking-widest">المحاميد - مراكش</p>
-          </div>
-        </motion.div>
+        {/* Global Footer Elements */}
+        <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowManual(true); }}
+            className="text-blue-200/50 hover:text-white transition-colors text-xs font-bold flex items-center gap-2"
+          >
+            <Info className="w-4 h-4" />
+            دليل الاستخدام والملاحظات
+          </button>
+          <p className="text-white/20 text-[10px] font-black uppercase tracking-widest">المحاميد - مراكش • 2026</p>
+        </div>
       </div>
     );
   }
@@ -1738,13 +1801,15 @@ export default function App() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-10 border border-white/10"
         >
-          <button 
-            onClick={() => setViewRole('landing')}
-            className="mb-8 flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm font-bold"
-          >
-            <ArrowRight className="w-4 h-4 rotate-180" />
-            رجوع
-          </button>
+          {!isPortalIsolated && (
+            <button 
+              onClick={() => setViewRole('landing')}
+              className="mb-8 flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm font-bold"
+            >
+              <ArrowRight className="w-4 h-4 rotate-180" />
+              رجوع
+            </button>
+          )}
 
           <div className="mb-8">
             <h2 className="text-2xl font-black text-white">دخول النظام</h2>
@@ -1831,7 +1896,7 @@ export default function App() {
         
         {/* Profile / Logout Widget (Floating) */}
         <AnimatePresence>
-          {hasAdminAccess && (
+          {hasAdminAccess && viewRole !== 'user' && !(isPortalIsolated && userRole === 'staff') && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -1863,26 +1928,30 @@ export default function App() {
                         ربط حساب Google
                       </button>
                     )}
-                    <button 
-                      onClick={() => {
-                        signOut(auth);
-                        setStaffRole(false);
-                        setAdminLocalRole(false);
-                        setViewRole('landing');
-                      }}
-                      className="text-orange-400 text-[10px] font-bold hover:text-orange-300 transition-colors"
-                    >
-                      تسجيل الخروج
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setViewRole('landing');
-                      }}
-                      className="text-white/40 text-[9px] font-bold hover:text-white transition-colors flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/5"
-                    >
-                      <Home className="w-2.5 h-2.5" />
-                      العودة للرئيسية
-                    </button>
+                    {!isPortalIsolated && (
+                      <button 
+                        onClick={() => {
+                          signOut(auth);
+                          setStaffRole(false);
+                          setAdminLocalRole(false);
+                          setViewRole(isPortalIsolated ? 'admin_gate' : 'landing');
+                        }}
+                        className="text-orange-400 text-[10px] font-bold hover:text-orange-300 transition-colors"
+                      >
+                        تسجيل الخروج
+                      </button>
+                    )}
+                    {!isPortalIsolated && (
+                      <button 
+                        onClick={() => {
+                          setViewRole('landing');
+                        }}
+                        className="text-white/40 text-[9px] font-bold hover:text-white transition-colors flex items-center gap-1 px-2 py-0.5 rounded-lg border border-white/5"
+                      >
+                        <Home className="w-2.5 h-2.5" />
+                        العودة للرئيسية
+                      </button>
+                    )}
                     <button 
                       onClick={() => setShowManual(true)}
                       className="text-blue-300/60 text-[9px] font-bold hover:text-blue-200 transition-colors flex items-center gap-1 mt-1"
@@ -1914,17 +1983,31 @@ export default function App() {
               <span>دليل الاستخدام وملاحظات</span>
             </button>
 
-            <button 
-              onClick={() => {
-                setAdminLocalRole(false);
-                setStaffRole(false);
-                setViewRole('landing');
-              }}
-              className="absolute top-8 left-8 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all group"
-              title="تسجيل الخروج"
-            >
-              <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-            </button>
+            {/* Corner Action Button */}
+            {!isPortalIsolated && (
+              <button 
+                onClick={() => {
+                  setAdminLocalRole(false);
+                  setStaffRole(false);
+                  setViewRole('landing');
+                }}
+                className="absolute top-8 left-8 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all group"
+                title="تسجيل الخروج"
+              >
+                <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+              </button>
+            )}
+
+            {isPortalIsolated && (viewRole === 'user' || userRole === 'staff') && (
+              <button 
+                onClick={() => setShowManual(true)}
+                className="absolute top-8 left-8 p-3 rounded-full bg-blue-600/30 text-white hover:bg-blue-600/50 transition-all flex items-center gap-2 px-4 shadow-lg backdrop-blur-md border border-white/10"
+                title="دليل الاستخدام"
+              >
+                <Info className="w-5 h-5" />
+                <span className="text-[10px] font-black">دليل الاستخدام</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -1994,18 +2077,19 @@ export default function App() {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Bottom Credits & Navigation */}
-              <div className="text-center pb-8 flex flex-col items-center gap-4">
-                <button 
-                  onClick={() => {
-                    setViewRole('landing');
-                  }}
-                  className="px-8 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-2xl text-xs font-bold hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 group"
-                >
-                  <Home className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  الرجوع للقائمة الرئيسية
-                </button>
-              </div>
+              {!isPortalIsolated && (
+                <div className="text-center pb-8 flex flex-col items-center gap-4">
+                  <button 
+                    onClick={() => {
+                      setViewRole('landing');
+                    }}
+                    className="px-8 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-2xl text-xs font-bold hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 group"
+                  >
+                    <Home className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    الرجوع للقائمة الرئيسية
+                  </button>
+                </div>
+              )}
 
               {/* Extra Hero Section (Matching bottom of image) */}
               <div className="bg-[#1e3a8a] p-12 rounded-[3rem] text-center text-white border border-white/5 shadow-inner">
@@ -2111,15 +2195,17 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-12 flex justify-center">
-                 <button 
-                  onClick={() => setViewRole('landing')}
-                  className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold flex items-center gap-2 shadow-xl hover:bg-slate-800 transition-all"
-                >
-                  <ArrowRight className="w-5 h-5 rotate-180" />
-                  رجوع للقائمة الرئيسية
-                </button>
-              </div>
+              {!isPortalIsolated && (
+                <div className="mt-12 flex justify-center">
+                   <button 
+                    onClick={() => setViewRole('landing')}
+                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold flex items-center gap-2 shadow-xl hover:bg-slate-800 transition-all"
+                  >
+                    <ArrowRight className="w-5 h-5 rotate-180" />
+                    رجوع للقائمة الرئيسية
+                  </button>
+                </div>
+              )}
             </>
           )}
         </main>
