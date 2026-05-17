@@ -52,6 +52,10 @@ service cloud.firestore {
               (request.auth.token.email_verified == true && exists(/databases/$(database)/documents/admins/$(request.auth.uid))));
     }
 
+    function isAdminEmail() {
+      return isSignedIn() && request.auth.token.email == 'rrachidv4@gmail.com';
+    }
+
     match /admins/{userId} {
       allow read: if isSignedIn();
       allow write: if isAdmin() || (isSignedIn() && request.auth.token.email == 'rrachidv4@gmail.com');
@@ -66,18 +70,11 @@ service cloud.firestore {
       
       allow list, get: if true;
       
-      allow update: if (isAdmin() || isAdminEmail()) &&
-                      isValidId(registrationId) &&
-                      isValidRegistration(incoming()) &&
+      allow update: if isValidId(registrationId) &&
                       incoming().updatedAt == request.time &&
-                      incoming().createdAt == existing().createdAt &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'gradeLevel', 'phone', 'address', 'chosenSchool', 'choice1', 'choice2', 'choice3', 'updatedAt', 'deletedAt', 'isAccepted', 'acceptedSchool']);
       
-      allow delete: if (isAdmin() || isAdminEmail()) && isValidId(registrationId);
-    }
-
-    function isAdminEmail() {
-      return isSignedIn() && request.auth.token.email == 'rrachidv4@gmail.com';
+      allow delete: if isValidId(registrationId);
     }
 
     function incoming() {

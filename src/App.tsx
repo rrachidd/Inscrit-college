@@ -643,6 +643,7 @@ const RegistrationsTable = ({
       });
     } catch (error) {
       console.error("Error accepting registration:", error);
+      handleFirestoreError(error, OperationType.UPDATE, `registrations/${reg.id}`);
     }
   };
 
@@ -1607,6 +1608,19 @@ export default function App() {
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery) return;
+
+    // Prioritize school name matching
+    const q = searchQuery.trim().toLowerCase();
+    const matchedSchool = SCHOOLS.find(s => 
+      s.name.toLowerCase().includes(q) || 
+      q.includes(s.name.toLowerCase())
+    );
+
+    if (matchedSchool) {
+      setSelectedSchool(matchedSchool);
+      return;
+    }
+
     setLoading(true);
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ address: searchQuery + ', المحاميد, مراكش, المغرب' }, (results, status) => {
@@ -1619,6 +1633,22 @@ export default function App() {
         // Removed alerts for cleaner UX
       }
     });
+  }, [searchQuery]);
+
+  // Real-time school search for immediate feedback on the map
+  useEffect(() => {
+    if (searchQuery.length < 3) return;
+    
+    const q = searchQuery.trim().toLowerCase();
+    // Try to find an exact match or a very strong match
+    const exactMatch = SCHOOLS.find(s => 
+      s.name.toLowerCase() === q || 
+      s.name.toLowerCase().replace('إعدادية ', '') === q
+    );
+
+    if (exactMatch) {
+      setSelectedSchool(exactMatch);
+    }
   }, [searchQuery]);
 
   const getCurrentLocation = () => {
@@ -1819,14 +1849,14 @@ export default function App() {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              const schoolMatch = SCHOOLS.find(s => s.name === adminGateData.username);
+              const schoolMatch = SCHOOLS.find(s => s.name === adminGateData.username || (s.staffUsername && s.staffUsername === adminGateData.username));
               
               if (adminGateData.username === ADMIN_USER && adminGateData.password === ADMIN_PASS) {
                 setAdminLocalRole(true);
                 setStaffRole(false);
                 setStaffSchool(null);
                 setViewRole('admin_dashboard');
-              } else if (schoolMatch && adminGateData.password === STAFF_PASS) {
+              } else if (schoolMatch && (adminGateData.password === STAFF_PASS || (schoolMatch.staffPassword && adminGateData.password === schoolMatch.staffPassword))) {
                 setStaffRole(true);
                 setAdminLocalRole(false);
                 setStaffSchool(schoolMatch.name);
@@ -1837,7 +1867,7 @@ export default function App() {
                 setStaffSchool(null);
                 setViewRole('admin_dashboard');
               } else {
-                setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة. للدخول كمساعد استعمل اسم المؤسسة كاسم مستخدم.');
+                setAdminGateError('اسم المستخدم أو كلمة المرور غير صحيحة. استعمل معلومات الحساب المخصصة لمؤسستك.');
               }
             }}
             className="space-y-5"
@@ -1911,7 +1941,14 @@ export default function App() {
                   )}
                 </div>
                 <div className="text-center">
-                  <p className="text-white font-bold text-sm">{user?.displayName || (userRole === 'admin' ? 'مدير النظام' : 'مساعد النظام')}</p>
+                  <p className="text-white font-bold text-sm">
+                    {user?.displayName || (userRole === 'admin' ? 'مدير النظام' : 'مساعد النظام')}
+                  </p>
+                  {!user && (
+                    <p className="text-amber-400 text-[8px] font-bold mt-0.5 px-2 py-0.5 bg-amber-400/10 rounded-full border border-amber-400/20">
+                      يجب ربط حساب Google للقيام بالعمليات
+                    </p>
+                  )}
                   <p className="text-blue-200 text-[9px] font-bold mb-1 opacity-60">
                     {userRole === 'admin' ? 'مسؤول (Full Admin)' : 'مساعد (Staff User)'}
                   </p>

@@ -5,6 +5,8 @@ export interface SchoolData {
   lng: number;
   address: string;
   type: string;
+  staffUsername?: string;
+  staffPassword?: string;
 }
 
 export const SCHOOLS: SchoolData[] = [
@@ -19,7 +21,14 @@ export const SCHOOLS: SchoolData[] = [
   { id: 10, name: "إعدادية الأطلس", lat: 31.602719, lng: -8.051217, address: "شارع سجلماسة، مراكش", type: "إعدادية" },
   { id: 11, name: "إعدادية النهضة", lat: 31.596387, lng: -8.043653, address: "المحاميد، مراكش", type: "إعدادية" },
   { id: 12, name: "إعدادية غاندي", lat: 31.582706, lng: -8.032965, address: "منطقة المحاميد، مراكش", type: "إعدادية" },
-  { id: 13, name: "إعدادية المحاميد 9", lat: 31.571060, lng: -8.058709, address: "المحاميد، مراكش 40160", type: "إعدادية" }
+  { id: 13, name: "إعدادية المحاميد 9", lat: 31.571060, lng: -8.058709, address: "المحاميد، مراكش 40160", type: "إعدادية" },
+  { id: 14, name: "إعدادية يعقوب المنصور", lat: 31.615569, lng: -7.973241, address: "سيدي يوسف بن علي، مراكش", type: "إعدادية" },
+  { id: 15, name: "إعدادية عمر بن الخطاب", lat: 31.615110, lng: -7.972089, address: "سيدي يوسف بن علي، مراكش", type: "إعدادية" },
+  { id: 16, name: "ثانوية الفقيه محمد بنبين", lat: 31.597487, lng: -7.963890, address: "سيدي يوسف بن علي، مراكش", type: "إعدادية" },
+  { id: 17, name: "إعدادية حمان الفطواكي", lat: 31.607548, lng: -7.957287, address: "سيدي يوسف بن علي، مراكش", type: "إعدادية" },
+  { id: 18, name: "إعدادية الصفاء", lat: 31.606857, lng: -7.958125, address: "سيدي يوسف بن علي، مراكش", type: "إعدادية" },
+  { id: 19, name: "إعدادية فاطمة الفهرية", lat: 31.608041, lng: -7.967248, address: "منطقة جيليز، مراكش", type: "إعدادية" },
+  { id: 20, name: "إعدادية ابن العريف", lat: 31.605060, lng: -7.967291, address: "منطقة الداوديات، مراكش", type: "إعدادية" }
 ];
 
 export const MHAMID_CENTER = { lat: 31.6300, lng: -8.0250 };
