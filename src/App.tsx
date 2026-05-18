@@ -1651,7 +1651,7 @@ export default function App() {
     }
   }, [searchQuery]);
 
-  const getCurrentLocation = () => {
+  const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
     setLoading(true);
     navigator.geolocation.getCurrentPosition(
@@ -1664,7 +1664,12 @@ export default function App() {
         setLoading(false);
       }
     );
-  };
+  }, []);
+
+  // Get location on initial mount
+  useEffect(() => {
+    getCurrentLocation();
+  }, [getCurrentLocation]);
 
   // Calculate distances when user location changes
   useEffect(() => {

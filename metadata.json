@@ -2,5 +2,5 @@
   "name": "نظام إدارة التسجيلات",
   "description": "نظام التوجيه المدرسي بمنطقة المحاميد مراكش مع فضاءات مستقلة للتلاميذ والإدارة.",
   "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
