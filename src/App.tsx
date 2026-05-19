@@ -301,8 +301,112 @@ const SchoolCard = ({
 const AdminDashboard = ({ registrations, userRole, staffSchool, globalStats }: { registrations: RegistrationData[], userRole: 'admin' | 'staff' | 'landing', staffSchool: string | null, globalStats: Record<string, number> }) => {
   const schoolCount = SCHOOLS.map(school => ({
     name: school.name,
-    count: globalStats[school.name] || 0
-  })).filter(s => userRole === 'admin' || s.name === staffSchool);
+    count: globalStats[school.name] || 0,
+    address: school.address,
+    type: school.type
+  }))
+  .filter(s => userRole === 'admin' || s.name === staffSchool)
+  .sort((a, b) => b.count - a.count);
+
+  const handlePrintReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const reportDate = new Date().toLocaleDateString('ar-MA');
+    const totalRegistrations = Object.values(globalStats).reduce((a, b) => a + b, 0);
+
+    const html = `
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>تقرير إحصائيات التوجيه المدرسي - ${reportDate}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+            h1 { color: #1e3a8a; font-size: 24px; margin-bottom: 10px; }
+            .meta { color: #64748b; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: right; }
+            th { bg-color: #f8fafc; font-weight: bold; }
+            .total-row { font-weight: bold; background-color: #f1f5f9; }
+            .stats-summary { display: grid; grid-template-cols: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+            .stat-card { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; }
+            .stat-card h4 { margin: 0; font-size: 14px; color: #64748b; }
+            .stat-card p { margin: 5px 0 0; font-size: 20px; font-weight: bold; color: #1e3a8a; }
+            @media print {
+              .no-print { display: none; }
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>تقرير إحصائيات التسجيلات المدرسية - منطقة المحاميد</h1>
+            <div class="meta">تاريخ التقرير: ${reportDate} | استخراج بواسطة: نظام التوجيه</div>
+          </div>
+
+          <div class="stats-summary">
+            <div class="stat-card">
+              <h4>إجمالي التسجيلات</h4>
+              <p>${totalRegistrations}</p>
+            </div>
+            <div class="stat-card">
+              <h4>عدد المؤسسات</h4>
+              <p>${SCHOOLS.length}</p>
+            </div>
+            <div class="stat-card">
+              <h4>أعلى تسجيل</h4>
+              <p>${Math.max(...schoolCount.map(s => s.count))}</p>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>اسم المؤسسة</th>
+                <th>النوع</th>
+                <th>العنوان</th>
+                <th>عدد التلاميذ المسجلين</th>
+                <th>النسبة المئوية</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[...schoolCount].sort((a, b) => b.count - a.count).map(s => `
+                <tr>
+                  <td>${s.name}</td>
+                  <td>${s.type}</td>
+                  <td>${s.address}</td>
+                  <td>${s.count}</td>
+                  <td>${((s.count / (totalRegistrations || 1)) * 100).toFixed(1)}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="3">الإجمالي العام</td>
+                <td>${totalRegistrations}</td>
+                <td>100%</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8;">
+            هذا التقرير تم توليده تلقائياً من نظام إدارة التوجيه المدرسي
+          </div>
+
+          <script>
+            window.onload = () => {
+              window.print();
+              // window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   const totalGlobal = userRole === 'staff' && staffSchool 
     ? (globalStats[staffSchool] || 0)
@@ -323,6 +427,15 @@ const AdminDashboard = ({ registrations, userRole, staffSchool, globalStats }: {
           {userRole === 'admin' ? 'لوحة تحكم المسؤول' : (staffSchool ? `فضاء: ${staffSchool}` : 'لوحة تحكم المساعد')}
         </h2>
         <div className="flex items-center gap-3">
+          {userRole === 'admin' && (
+            <button
+              onClick={handlePrintReport}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-slate-200"
+            >
+              <Printer className="w-4 h-4" />
+              <span>طباعة الإحصائيات التفصيلية</span>
+            </button>
+          )}
           {userRole === 'admin' && !auth.currentUser && (
             <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold animate-pulse">
               <AlertCircle className="w-4 h-4" />
@@ -498,7 +611,7 @@ const AdminDashboard = ({ registrations, userRole, staffSchool, globalStats }: {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {schoolCount.sort((a, b) => b.count - a.count).map((s) => (
+              {schoolCount.map((s) => (
                 <tr key={s.name} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-bold text-slate-700">{s.name}</td>
                   <td className="px-6 py-4 font-mono text-sm">{s.count}</td>
@@ -1686,7 +1799,7 @@ export default function App() {
           distanceValue: distKm * 1000
         };
       });
-      const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+      const sorted = [...info].sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
       setSchoolsWithInfo(sorted);
       setSelectedSchool(sorted[0]);
       return;
@@ -1709,7 +1822,7 @@ export default function App() {
             distanceValue: el.distance?.value
           }));
           
-          const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+          const sorted = [...info].sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
           setSchoolsWithInfo(sorted);
           setSelectedSchool(sorted[0]);
         } else {
@@ -1729,7 +1842,7 @@ export default function App() {
               distanceValue: distKm * 1000
             };
           });
-          const sorted = info.sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
+          const sorted = [...info].sort((a, b) => (a.distanceValue || 0) - (b.distanceValue || 0));
           setSchoolsWithInfo(sorted);
           setSelectedSchool(sorted[0]);
         }
